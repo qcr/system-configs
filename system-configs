@@ -17,7 +17,7 @@ SCRIPT_DIR="$(dirname $(readlink -f $0))"
 
 # Valid commands should be the file name of valid scripts to call
 # held within the scripts folder
-VALID_CMDS=("install" "sync" "trac")
+VALID_CMDS=("install" "sync" "track")
 
 # Screen Reset
 RESET='\033[0m'
@@ -105,4 +105,4 @@ else
 fi
 
 # Run tool
-# /bin/bash ${SCRIPT_DIR}/scripts/${CMD} ${ARGS_LIST[@]}
+/bin/bash ${SCRIPT_DIR}/scripts/${CMD} ${ARGS_LIST[@]}
