@@ -15,27 +15,7 @@
 SCRIPT_NAME="$(basename $(readlink -f $0))"
 SCRIPT_DIR="$(dirname $(readlink -f $0))"
 
-# Valid commands should be the file name of valid scripts to call
-# held within the scripts folder
-VALID_CMDS=("install" "sync" "track")
 
-# Screen Reset
-RESET='\033[0m'
-
-# Screen Colors
-BLACK="\033[0;30m"
-RED="\033[0;31m"
-GREEN="\033[0;32m"
-YELLOW="\033[0;33m"
-BLUE="\033[0;34m"
-PURPLE="\033[0;35m"
-CYAN="\033[0;36m"
-WHITE="\033[0;37m"
-
-# Screen helpers
-INFO="${GREEN}[INFO]${RESET} "
-WARN="${YELLOW}[WARN]${RESET} "
-ERROR="${RED}[ERROR]${RESET} "
 
 
 #################
@@ -46,7 +26,7 @@ function print_usage(){
     printf "\nRuns the QCR System Configs tool.
     
 Usage:
-    system_configs [-h] <command> <arguments>
+    system_configs [-h|--help] [-v|--verbose] <command> <arguments>
 
 Arguments:
     <command>       the command to run.
@@ -55,12 +35,16 @@ Arguments:
 Commands:
 "
   
-  cmds=($(find "$SCRIPT_DIR/scripts" -mindepth 1 -maxdepth 1 -type f -not -name '.*' -exec basename {} \;))
-  for c in ${cmds[@]}; do
-    printf "    > $c\n"
-  done 
+    CMDS="$(get_commands)"
+    for i in ${CMDS[@]}; do
+        printf "    > $i\n"
+    done
 
-  exit 0
+}
+
+function get_commands(){
+    CMDS=($(find "${SCRIPT_DIR}/scripts" -mindepth 1 -maxdepth 1 -executable -type f -not -name '.*' -exec basename {} \;))
+    echo "${CMDS[@]}"
 }
 
 
@@ -68,40 +52,66 @@ Commands:
 ### MAIN SCRIPT ###
 ###################
 
+# Set shell options, enter help set in terminal for definitions
+set -o pipefail
+
+# Source Common
+source ${SCRIPT_DIR}/scripts/common
+
+# Display heading
+display_heading "SYSTEMS CONFIG TOOL"
+
+# Split args into what is parsed here, and what goes to a subcommand
+SUB_INDEX=$(printf '%s\n' "$@" | grep -n '^[a-zA-Z]' | head -n 1 | cut -f1 -d: || echo "$(($#+1))")
+MAIN_ARGS=( "${@:1:$((SUB_INDEX-1))}")
+SUB_ARGS=( "${@:$SUB_INDEX}" )
+
 # Parse arguments
-while getopts h OPT; do
-    case "${OPT}" in
-        h|help) print_usage; exit ;;
-        ?) print_usage; exit ;;
+PARSED_ARGS=$(getopt -a -n ${SCRIPT_NAME} -o 'hv' --long 'help,verbose' -- "${MAIN_ARGS[@]}")
+eval set -- "${PARSED_ARGS}"
+VERBOSE=false
+while true; do
+    case "$1" in 
+        -h|--help) 
+        print_usage; exit 0;;
+        -v|--verbose) 
+        VERBOSE=true; shift ;;
+        # -- indicates end of arguments, break while loop
+        --) shift; break ;;
+        # invalid option was passed, print usage
+        *)
+        printf "${ERROR}Unrecognized option '$1'\n" 
+        print_usage 
+        exit 1 ;;    
     esac
 done
 
-
-# Valid number of arguments
-if [ $# -eq 0 ]; then
+# Valid number of sub arguments
+if [ ${#SUB_ARGS[@]} -eq 0 ]; then
     print_usage
     exit
 fi
 
 
 # Check command argument is valid
-ARGS=( "$@" )
-CMD=${ARGS[0]}
+VALID_CMDS="$(get_commands)"
+CMD=${SUB_ARGS[0]}
 if [[ ! " ${VALID_CMDS[*]} " =~ " ${CMD} "  ]]; then
     printf "${ERROR}The command ${YELLOW}${CMD}${RESET} does not exist.\n"
     print_usage
-    exit
+    exit 1
 fi
 
-# Get sub-script and arguments
-CMD=${ARGS[0]}
-ARGS_LIST=${ARGS[@]:1}
+# Get sub-script arguments
+ARGS_LIST=${SUB_ARGS[@]:1}
 
 # Print to terminal what is being called
-if [ ${#ARGS_LIST[@]} == 1 ] && [ "${ARGS_LIST[0]}" == "" ]; then
-    printf "${INFO}Calling '${YELLOW}${SCRIPT_DIR}/scripts/${CMD}${RESET}' with no arguments\n"
-else
-    printf "${INFO}Calling '${YELLOW}${SCRIPT_DIR}/scripts/${CMD}${RESET}' with arguments '${YELLOW}${ARGS[@]:1}${RESET}'\n"
+if [ ${VERBOSE} == true ]; then
+    if [ ${#ARGS_LIST[@]} == 1 ] && [ "${ARGS_LIST[0]}" == "" ]; then
+        printf "${INFO}Calling '${YELLOW}${SCRIPT_DIR}/scripts/${CMD}${RESET}' with no arguments\n\n"
+    else
+        printf "${INFO}Calling '${YELLOW}${SCRIPT_DIR}/scripts/${CMD}${RESET}' with arguments '${YELLOW}${ARGS[@]:1}${RESET}'\n\n"
+    fi
 fi
 
 # Run tool

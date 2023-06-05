@@ -1,0 +1,52 @@
+#!/bin/bash
+#
+#
+# Common bash components
+
+################
+### DEFAULTS ###
+################
+
+# Screen Reset
+RESET='\033[0m'
+
+# Screen Colors
+BLACK="\033[0;30m"
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[0;33m"
+BLUE="\033[0;34m"
+PURPLE="\033[0;35m"
+CYAN="\033[0;36m"
+WHITE="\033[0;37m"
+
+# Screen helpers
+INFO="${GREEN}[INFO]${RESET} "
+WARN="${YELLOW}[WARN]${RESET} "
+ERROR="${RED}[ERROR]${RESET} "
+
+#################
+### FUNCTIONS ###
+#################
+
+
+
+function display_heading() {
+    # Prints a heading to the screen
+    #
+    # Usage:
+    #   display_heading "<HEADING TEXT>"
+
+    # $1 heading text
+    char="-"
+    text=" ${1:-} "
+    (( left_pad=(80 - ${#text})/2 ))
+    (( right_pad=(81 - ${#text})/2 ))
+    printf "${GREEN}"
+    printf "\n"; printf "%.0s$char" {1..80}; printf "\n"
+    printf "%.0s$char" $(seq 1 $left_pad)
+    printf "${WHITE}$text${GREEN}"
+    printf "%.0s$char" $(seq 1 $right_pad)
+    printf "\n"; printf "%.0s$char" {1..80}; printf "\n"
+    printf "${RESET}"
+}
