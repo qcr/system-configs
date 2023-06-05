@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+#
+# The main entry point script to utilise the various commands
+#
+# Please see https://github.com/qcr/services for full details on how
+# things work
+
+
+#################
+### VARIABLES ###
+#################
+
+
+# The name of this script, and the directory where it is located
+SCRIPT_NAME="$(basename $(readlink -f $0))"
+SCRIPT_DIR="$(dirname $(readlink -f $0))"
+
+# Valid commands should be the file name of valid scripts to call
+# held within the scripts folder
+VALID_CMDS=("install" "sync" "trac")
+
+# Screen Reset
+RESET='\033[0m'
+
+# Screen Colors
+BLACK="\033[0;30m"
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[0;33m"
+BLUE="\033[0;34m"
+PURPLE="\033[0;35m"
+CYAN="\033[0;36m"
+WHITE="\033[0;37m"
+
+# Screen helpers
+INFO="${GREEN}[INFO]${RESET} "
+WARN="${YELLOW}[WARN]${RESET} "
+ERROR="${RED}[ERROR]${RESET} "
+
+
+#################
+### FUNCTIONS ###
+#################
+
+function print_usage(){
+    printf "\nRuns the QCR System Configs tool.
+    
+Usage:
+    system_configs [-h] <command> <arguments>
+
+Arguments:
+    <command>       the command to run.
+    <arguments>     the arguments for the command.
+
+Commands:
+"
+  
+  cmds=($(find "$SCRIPT_DIR/scripts" -mindepth 1 -maxdepth 1 -type f -not -name '.*' -exec basename {} \;))
+  for c in ${cmds[@]}; do
+    printf "    > $c\n"
+  done 
+
+  exit 0
+}
+
+
+###################
+### MAIN SCRIPT ###
+###################
+
+# Parse arguments
+while getopts h OPT; do
+    case "${OPT}" in
+        h|help) print_usage; exit ;;
+        ?) print_usage; exit ;;
+    esac
+done
+
+
+# Valid number of arguments
+if [ $# -eq 0 ]; then
+    print_usage
+    exit
+fi
+
+
+# Check command argument is valid
+ARGS=( "$@" )
+CMD=${ARGS[0]}
+if [[ ! " ${VALID_CMDS[*]} " =~ " ${CMD} "  ]]; then
+    printf "${ERROR}The command ${YELLOW}${CMD}${RESET} does not exist.\n"
+    print_usage
+    exit
+fi
+
+# Get sub-script and arguments
+CMD=${ARGS[0]}
+ARGS_LIST=${ARGS[@]:1}
+
+# Print to terminal what is being called
+if [ ${#ARGS_LIST[@]} == 1 ] && [ "${ARGS_LIST[0]}" == "" ]; then
+    printf "${INFO}Calling '${YELLOW}${SCRIPT_DIR}/scripts/${CMD}${RESET}' with no arguments\n"
+else
+    printf "${INFO}Calling '${YELLOW}${SCRIPT_DIR}/scripts/${CMD}${RESET}' with arguments '${YELLOW}${ARGS[@]:1}${RESET}'\n"
+fi
+
+# Run tool
+# /bin/bash ${SCRIPT_DIR}/scripts/${CMD} ${ARGS_LIST[@]}

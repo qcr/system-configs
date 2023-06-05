@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+#
+# Allows tracking a new system configuration file or directory
+#
+# To start tracking a new system file:
+#     qcr system_configs track file|directory
+#
+# For more details, see https://docs.qcr.ai/reference/resources/config_tracking_tool/
+
+set -euo pipefail
+
+function _root_check() {
+  if [ "$EUID" -ne 0 ]; then echo "Please re-run with sudo."; exit 1; fi
+}
+
+function _get_base_name() {
+  IFS='-' read -ra PARTS <<< $1
+  echo ${PARTS[0]}
+}
+
+function _get_variant() {
+  IFS='-' read -ra PARTS <<< $1
+  VARIANT=$(IFS=- ; echo "${PARTS[*]:1}")
+  if [ "$VARIANT" != "" ]; then
+    echo $VARIANT
+  else
+    echo "default"
+  fi 
+}
+
+function _track() {
+  FILES=("$@")
+  
+  for TARGET_FILE in "${FILES[@]}"; do
+    if [ -L "$TARGET_FILE" ] && [ "$RESTORE" == "0" ] && [ "DELETE" == "0" ]; then
+      printf "\e[31m%s\e[0m\n" \
+        "ERROR: config file already appears to be a symlink. Not using."
+      continue;
+    fi
+    
+    if [ -d "$TARGET_FILE" ] && [ "$RECURSIVE" == "1" ]; then
+      printf "  Expanding directory $TARGET_FILE...\n"
+      
+      ftype='f'
+      if [ "$RESTORE" != "0" ]; then
+        ftype="l"
+      fi
+
+      CONTENT=()
+      while IFS=  read -r -d $'\0'; do
+          CONTENT+=("$REPLY")
+      done < <(find $TARGET_FILE -type $ftype -print0)
+      
+      _track "${CONTENT[@]}"
+      continue
+    fi
+
+    target="$(realpath -s "$TARGET_FILE")"
+    destination=$target
+
+    if [ -d "$target" ]; then
+      target="$target/"
+    fi
+
+    TRASH=/var/qcr/removed
+    
+    echo -e "\tMoving $target"
+    
+    postfix=""
+    if [ "$DELETE" == "1" ]; then
+        postfix=".delete"
+    fi
+
+    # Add requested config
+    if [ "$RESTORE" == "0" ]; then
+        mkdir -p "$(dirname "$ROOT$target")"
+        if [ -e "$target" ]; then
+            mkdir -p "$TRASH/$(dirname $target)"
+            
+            rsync -r -a  "$target" "$ROOT$destination$postfix"
+            rsync -r -a -p --remove-source-files "$target" "$TRASH/$destination"
+            
+            rm -rf $target
+            
+            echo -e "\tMoved $target to $ROOT$destination$postfix"
+        else
+            sudo touch "$ROOT$destination"
+        fi
+
+        if [ "$DELETE" == "0" ]; then
+            sudo ln -s "$ROOT$target" "$destination"
+            sudo chown -h --reference "$ROOT$destination" "$destination"
+            echo -e "\tSymlinked $ROOT$destination to $destination"
+        fi
+    else
+        if [ -e "$TRASH$target" ]; then
+            rm -rf $destination
+            
+            mkdir -p "$(dirname $destination)"
+            
+            rsync -r -a -p --remove-source-files "$TRASH$target" "$destination"
+            # rm -rf $ROOT$target
+            # rm -rf $TRASH$target
+
+            echo -e "\tRestored $TRASH$target to $destination"
+        fi
+    fi
+
+  done
+}
+
+# Default Parameters
+HOSTNAME="$(hostname)"   #system Hostname
+VARIANT=""    #Hardware Variant to be used
+GH_BRANCH="" #Default Branch to use 
+GH_PATH=""
+GH_TEMPLATE_PATH=""
+GH_TEMPLATE_VARIANT="default"
+LOCAL_PATH="/opt/qcr"       #Alternative <Hostname>_system_configs file location if repo not accessible
+TARGET_FILE=""
+RECURSIVE=0
+RESTORE=0
+DELETE=0
+
+TARGET_FILES=()
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -h|--host|--hostname)
+      HOSTNAME="$2"
+      shift
+      shift
+      ;;
+    -hw|--hadware-variant)
+      VARIANT="$2"
+      shift
+      shift
+      ;;
+    -lp|-l|--local-path)
+      LOCAL_PATH="$2"
+      shift
+      shift
+      ;;
+    -d|--delete)
+      DELETE=1
+      shift
+      ;;
+    -r|--recursive)
+      RECURSIVE=1
+      shift
+      ;;
+    -rs|--restore)
+      RESTORE=1
+      shift
+      ;;
+    *)
+      TARGET_FILES+=("$1")
+      shift
+      ;;
+  esac
+done
+
+_root_check
+
+if [ "$VARIANT" == "" ]; then
+  VARIANT=$(_get_variant $HOSTNAME)
+fi
+
+HOSTNAME=$(_get_base_name $HOSTNAME)
+GH_REPO="system-configs-$HOSTNAME"
+
+ROOT=$LOCAL_PATH/$GH_REPO/$VARIANT/
+
+mkdir -p $ROOT
+
+if [ ${#TARGET_FILES[@]} -eq 0 ]; then
+  printf "\e[31m%s\e[0m\n" \
+    "ERROR: please provide path to a file or directory."
+  exit 1;
+fi
+
+
+echo "Hostname: $(hostname)"
+echo "Local Machine Base": $HOSTNAME
+echo "Machine Variant: $VARIANT"
+echo "Configuration Path: $ROOT"
+
+echo "-------------------------------------------"
+_track "${TARGET_FILES[@]}"
