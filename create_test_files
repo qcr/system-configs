@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(dirname $(readlink -f $0))"
+
+# Remove existing folder
+if [ -e "${SCRIPT_DIR}/test" ]; then
+    rm -rf ${SCRIPT_DIR}/test
+fi
+
+# Make folder
+mkdir ${SCRIPT_DIR}/test
+mkdir ${SCRIPT_DIR}/test/dir_1
+mkdir ${SCRIPT_DIR}/test/dir_1/dir_2
+
+# Create files
+touch ${SCRIPT_DIR}/test/file_1
+touch ${SCRIPT_DIR}/test/dir_1/file_2
+touch ${SCRIPT_DIR}/test/dir_1/file_3
+touch ${SCRIPT_DIR}/test/dir_1/dir_2/file_4

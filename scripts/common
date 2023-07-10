@@ -25,9 +25,59 @@ INFO="${GREEN}[INFO]${RESET} "
 WARN="${YELLOW}[WARN]${RESET} "
 ERROR="${RED}[ERROR]${RESET} "
 
+# DEFAULT PARAMETERS
+
+# The hostname of the system, must conform to: <system_name>-<variation> 
+# system_name: must be all lowercase a-z characters
+# variation: must be all lowercase a-z characters, or 0-9
+HOSTNAME="$(hostname)"   
+
+# Sub component within the system (i.e., a secondary machine supporting the main system)
+# For example, a NUC running the RTOS for a Desktop GPU system
+SUB_COMP=""
+GH_ORG="qcr-configs"
+GH_REPO=""
+GH_BRANCH="" #Default Branch to use 
+GH_PATH=""
+GH_TEMPLATE_PATH=""
+GH_TEMPLATE_VARIANT="default"
+
+# The path on the machine where the files are stored. These files
+# are then symlinked to the required destination on the system
+LOCAL_PATH="/opt/qcr"
+
+# Location where original files are stored, for when
+# restore is called
+TRASH=/var/qcr/removed
+
+TOKEN_PASS=""
+
+
+
+
+
 #################
 ### FUNCTIONS ###
 #################
+
+function _root_check() {
+  if [ "$EUID" -ne 0 ]; then echo "Please re-run with sudo."; exit 1; fi
+}
+
+function _get_base_name() {
+  IFS='-' read -ra PARTS <<< $1
+  echo ${PARTS[0]}
+}
+
+function _get_sub_component() {
+  IFS='-' read -ra PARTS <<< $1
+  SUB_COMP=$(IFS=- ; echo "${PARTS[*]:1}")
+  if [ "$SUB_COMP" != "" ]; then
+    echo $SUB_COMP
+  else
+    echo "default"
+  fi 
+}
 
 
 

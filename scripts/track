@@ -7,39 +7,58 @@
 #
 # For more details, see https://docs.qcr.ai/reference/resources/config_tracking_tool/
 
-set -euo pipefail
 
-function _root_check() {
-  if [ "$EUID" -ne 0 ]; then echo "Please re-run with sudo."; exit 1; fi
-}
+#################
+### VARIABLES ###
+#################
 
-function _get_base_name() {
-  IFS='-' read -ra PARTS <<< $1
-  echo ${PARTS[0]}
-}
+# The name of this script, and the directory where it is located
+SCRIPT_NAME="$(basename $(readlink -f $0))"
+SCRIPT_DIR="$(dirname $(readlink -f $0))"
 
-function _get_variant() {
-  IFS='-' read -ra PARTS <<< $1
-  VARIANT=$(IFS=- ; echo "${PARTS[*]:1}")
-  if [ "$VARIANT" != "" ]; then
-    echo $VARIANT
-  else
-    echo "default"
-  fi 
+#################
+### FUNCTIONS ###
+#################
+
+# TODO. Document arguments and their meaning:
+#   -hostname - specify the machine hostname
+#   -sub-comp - specify the sub-component within the system
+#   -local-path - path where files are to be stored
+#   -delete - 
+#   -recursive - recursively adds files from a directory (what is the difference between this and simply tracking entire directory?)
+#   -restore 
+
+
+function print_usage(){
+    printf "\nTracks a file.
+    
+Usage:
+    system_configs [-h|--help] track <files>
+
+Arguments:
+    <files>      the files to track
+
+"
+
 }
 
 function _track() {
   FILES=("$@")
   
+  # Loop through files
   for TARGET_FILE in "${FILES[@]}"; do
-    if [ -L "$TARGET_FILE" ] && [ "$RESTORE" == "0" ] && [ "DELETE" == "0" ]; then
-      printf "\e[31m%s\e[0m\n" \
-        "ERROR: config file already appears to be a symlink. Not using."
+    printf "\n${INFO}Attempting to track: '${YELLOW}${TARGET_FILE}${RESET}'\n"
+
+    # Check if target file is already a symlink
+    # If target file is a symlink, can continue if restore or delete is 1
+    if [ -L "$TARGET_FILE" ] && [ "$RESTORE" == "0" ] && [ "${DELETE}" == "0" ]; then
+      printf "${WARNING}Ignoring file '${YELLOW}${TARGET_FILE}${RESET}' as it already appears to be a symlink.\n"
       continue;
     fi
     
+    # Attempting to track a directory
     if [ -d "$TARGET_FILE" ] && [ "$RECURSIVE" == "1" ]; then
-      printf "  Expanding directory $TARGET_FILE...\n"
+      printf "  - Expanding directory $TARGET_FILE...\n"
       
       ftype='f'
       if [ "$RESTORE" != "0" ]; then
@@ -55,16 +74,16 @@ function _track() {
       continue
     fi
 
+    # Destination is where the symlinked file will be located
+    # actual file will live at $ROOT/$destination
     target="$(realpath -s "$TARGET_FILE")"
     destination=$target
 
     if [ -d "$target" ]; then
       target="$target/"
     fi
-
-    TRASH=/var/qcr/removed
     
-    echo -e "\tMoving $target"
+    printf "  - Moving: $target\n"
     
     postfix=""
     if [ "$DELETE" == "1" ]; then
@@ -73,26 +92,36 @@ function _track() {
 
     # Add requested config
     if [ "$RESTORE" == "0" ]; then
+        # Make source location
         mkdir -p "$(dirname "$ROOT$target")"
+
+        # Check existence of target
         if [ -e "$target" ]; then
-            mkdir -p "$TRASH/$(dirname $target)"
-            
+            # Move target to source location
             rsync -r -a  "$target" "$ROOT$destination$postfix"
+
+            # Put original file in a back-up trash location
+            mkdir -p "$TRASH/$(dirname $target)"
             rsync -r -a -p --remove-source-files "$target" "$TRASH/$destination"
             
+            # Remove target
             rm -rf $target
             
-            echo -e "\tMoved $target to $ROOT$destination$postfix"
+            printf "  - Moved: $target to $ROOT$destination$postfix\n"
         else
+            # Create file
             sudo touch "$ROOT$destination"
         fi
 
+        # If delete is not set
         if [ "$DELETE" == "0" ]; then
+            # Create symlink and change ownership
             sudo ln -s "$ROOT$target" "$destination"
             sudo chown -h --reference "$ROOT$destination" "$destination"
-            echo -e "\tSymlinked $ROOT$destination to $destination"
+            printf "  - Symlinked: $ROOT$destination to $destination\n"
         fi
     else
+      # Restore the file from the back-up trash location
         if [ -e "$TRASH$target" ]; then
             rm -rf $destination
             
@@ -102,21 +131,24 @@ function _track() {
             # rm -rf $ROOT$target
             # rm -rf $TRASH$target
 
-            echo -e "\tRestored $TRASH$target to $destination"
+            printf "  - Restored $TRASH$target to $destination\n"
         fi
     fi
 
   done
 }
 
-# Default Parameters
-HOSTNAME="$(hostname)"   #system Hostname
-VARIANT=""    #Hardware Variant to be used
-GH_BRANCH="" #Default Branch to use 
-GH_PATH=""
-GH_TEMPLATE_PATH=""
-GH_TEMPLATE_VARIANT="default"
-LOCAL_PATH="/opt/qcr"       #Alternative <Hostname>_system_configs file location if repo not accessible
+###################
+### MAIN SCRIPT ###
+###################
+
+
+set -euo pipefail
+
+# Source common
+source ${SCRIPT_DIR}/common
+
+# Variables
 TARGET_FILE=""
 RECURSIVE=0
 RESTORE=0
@@ -124,22 +156,23 @@ DELETE=0
 
 TARGET_FILES=()
 
+# Parse arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
-    -h|--host|--hostname)
+    -h|--help) 
+      print_usage
+      exit 0;;
+    -H|--host|--hostname)
       HOSTNAME="$2"
-      shift
-      shift
+      shift 2
       ;;
-    -hw|--hadware-variant)
-      VARIANT="$2"
-      shift
-      shift
+    -s|--sub-component)
+      SUB_COMP="$2"
+      shift 2
       ;;
     -lp|-l|--local-path)
       LOCAL_PATH="$2"
-      shift
-      shift
+      shift 2
       ;;
     -d|--delete)
       DELETE=1
@@ -160,30 +193,35 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Root check
 _root_check
 
-if [ "$VARIANT" == "" ]; then
-  VARIANT=$(_get_variant $HOSTNAME)
+# Get sub-component, which according to OUT001 (Naming Conventions), is everything after the first hyphen
+if [ "$SUB_COMP" == "" ]; then
+  SUB_COMP=$(_get_sub_component $HOSTNAME)
 fi
 
+# Get base hostname, which according to OUT001 (Naming Conventions), is everything prior to the first hyphen
 HOSTNAME=$(_get_base_name $HOSTNAME)
 GH_REPO="system-configs-$HOSTNAME"
 
-ROOT=$LOCAL_PATH/$GH_REPO/$VARIANT/
-
+# Root path where files are to be stored and symlinked from
+ROOT=$LOCAL_PATH/$GH_REPO/$SUB_COMP/
 mkdir -p $ROOT
 
+# Error checking, need at least one file
 if [ ${#TARGET_FILES[@]} -eq 0 ]; then
-  printf "\e[31m%s\e[0m\n" \
-    "ERROR: please provide path to a file or directory."
+  printf "${ERROR}Please provide path to a file or directory.\n"
   exit 1;
 fi
 
+# Print info
+printf "\n${INFO}Hostname: ${HOSTNAME}\n"
+printf "${INFO}Sub-Component: $SUB_COMP\n"
+printf "${INFO}Configuration Path: $ROOT\n"
 
-echo "Hostname: $(hostname)"
-echo "Local Machine Base": $HOSTNAME
-echo "Machine Variant: $VARIANT"
-echo "Configuration Path: $ROOT"
+# Display heading
+display_heading "Tracking Files"
 
-echo "-------------------------------------------"
+# Track files - written as function for recursive capability
 _track "${TARGET_FILES[@]}"
