@@ -16,6 +16,13 @@
 SCRIPT_NAME="$(basename $(readlink -f $0))"
 SCRIPT_DIR="$(dirname $(readlink -f $0))"
 
+# Variables
+TARGET_FILES=() # List of target files
+RECURSIVE=0     # set to 1 if recursively adding files in a directory
+RESTORE=0       # set to 1 if restoring targets
+DELETE=0        # set to 1 if deleting targets
+
+
 #################
 ### FUNCTIONS ###
 #################
@@ -147,14 +154,6 @@ set -euo pipefail
 
 # Source common
 source ${SCRIPT_DIR}/common
-
-# Variables
-TARGET_FILE=""
-RECURSIVE=0
-RESTORE=0
-DELETE=0
-
-TARGET_FILES=()
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
