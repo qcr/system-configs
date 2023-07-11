@@ -62,8 +62,10 @@ function _create_directory_and_set_ownership() {
     # Creates a provided directory and sets
     # the owner and group as avaiable
 
-    # Make local path directory, and set owner
-    sudo mkdir -p $1
+    # Make local path directory
+    if [ ! -e $1 ]; then
+      sudo mkdir -p $1
+    fi
 
     # Change owner and group if user is set to root
     FUSER=$(stat -c '%U' $1)

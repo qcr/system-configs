@@ -10,17 +10,6 @@
 ### VARIABLES ###
 #################
 
-TOKEN=$(cat <<EOF
------BEGIN PGP MESSAGE-----
-
-jA0ECQMC3dcjUYabUyD/0l4BYKDynWFMV507QwSkXcDTzVZ9wu436o4s8iLFnamg
-c+cJaZU0Yn29aLKestHAjsjJMZfCbXeykrVJ2pk6CAy7fCwBzsPf9Ukd+QBdRnZO
-haXQ+AldWkekERAacZer
-=evG6
------END PGP MESSAGE-----
-EOF
-)
-
 
 # The name of this script, and the directory where it is located
 SCRIPT_NAME="$(basename $(readlink -f $0))"
@@ -31,15 +20,12 @@ UC_DIR=$(dirname ${SCRIPT_DIR})/.user_config
 DEFAULTS_FILE=${UC_DIR}/defaults
 ENC_TOKEN_FILE=${UC_DIR}/enc_token
 
-# Source common
-source ${SCRIPT_DIR}/common
-
 # Variables
 PULL=1
 GH_TOKEN=""
 GH_REPO=""
 GH_PATH=""
-GH_BRANCH=$GH_DEFAULT_BRANCH
+GH_BRANCH=""
 
 #################
 ### FUNCTIONS ###
@@ -96,7 +82,7 @@ function _create_local() {
 
   # Configure git
   git config --local init.defaultBranch $4
-  git config --local user.name qcr
+  git config --local user.name qcrbot
   git config --local user.email "qcrbot@qut.edu.au"
 
   # Create, and commit readme
@@ -134,12 +120,20 @@ function _check_required_variables() {
     # Decrypt token
     GH_TOKEN=$(gpg --decrypt ${ENC_TOKEN_FILE})
   fi
+
+  # Check GH_BRANCH is set
+  if [ "$GH_BRANCH" == "" ]; then
+    GH_BRANCH=$GH_DEFAULT_BRANCH
+  fi
 }
 
 
 ###################
 ### MAIN SCRIPT ###
 ###################
+
+# Source common
+source ${SCRIPT_DIR}/common
 
 # Source user config
 if [ -e ${DEFAULTS_FILE} ]; then
@@ -149,6 +143,9 @@ fi
 # Parse Arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
+    -h|--help) 
+      print_usage
+      exit 0;;
     -H|--host|--hostname)
       HOSTNAME="$2"
       shift 2
@@ -157,7 +154,7 @@ while [[ $# -gt 0 ]]; do
       GH_BRANCH="$2"
       shift 2
       ;;
-    -sp|-l|--store-path)
+    -sp|--store-path)
       STORE_PATH="$2"
       shift 2
       ;;
@@ -175,6 +172,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -p|--pat)
       GH_TOKEN="$2"
+      shift 2
+      ;;
+    -t|--template)
+      TEMPLATE="$2"
       shift 2
       ;;
     *)
@@ -200,7 +201,12 @@ _check_required_variables
 
 # Set repo name
 HOSTNAME=$(_get_base_name $HOSTNAME)
-GH_REPO="system-configs-$HOSTNAME"
+if [ -z $TEMPLATE ]; then
+  GH_REPO="system-configs-$HOSTNAME"
+else
+  GH_REPO="template-$TEMPLATE"
+fi
+
 
 # Set github path and local repo root path (root)
 GH_PATH="$GH_OWNER/$GH_REPO"
@@ -211,10 +217,12 @@ mkdir -p $LOCAL_ROOT
 
 # Print information to user
 printf "\n${INFO}Hostname: $HOSTNAME\n"
+printf "${INFO}GitHub Email: $GH_EMAIL\n"
+printf "${INFO}GitHub Owner: $GH_OWNER\n"
+printf "${INFO}GitHub Repo: $GH_REPO\n"
+printf "${INFO}GitHub Branch: $GH_BRANCH\n"
 printf "${INFO}Local Repo Path: $LOCAL_ROOT\n"
-printf "${INFO}Machine Repository: https://github.com/$GH_PATH\n"
-printf "${INFO}Branch: $GH_BRANCH\n"
-printf "${INFO}GitHub Email: $GH_EMAIL\n\n"
+printf "${INFO}Remote Repository: https://github.com/$GH_PATH\n\n"
 
 # Create remote if it doesn't exist
 if [ "$(_check_remote $GH_PATH)" == "0" ]; then
@@ -240,6 +248,44 @@ if [ "$PULL" == "1" ]; then
     # TODO: Deal with local changes, merge conflicts, etc.
     printf "\n${INFO}Pulling from remote...\n"
     git pull
+fi
+
+
+# Update template using system configuration
+if [ ! -z $TEMPLATE ]; then
+
+  # Get configuration files
+  CONFIG_ROOT=$STORE_PATH/"system-configs-$HOSTNAME"
+  FILES=$(find ${CONFIG_ROOT} -type f -not -path "*.git*" -not -name "README.md")
+
+  # Add any missing files to template
+  printf "\n${INFO}Adding files to template...\n"
+  DIFF_FILES=()
+  for f in ${FILES[@]}; do
+    # Get file path without CONFIG_ROOT
+    f="${f//$CONFIG_ROOT}"
+
+    # See if already exists in template
+    if [ ! -e ${LOCAL_ROOT}/$f ]; then
+      printf "\t-$f\n"
+      mkdir -p $(dirname $LOCAL_ROOT/$f)
+      rsync $CONFIG_ROOT/$f $LOCAL_ROOT/$f
+    elif ! cmp -s "$CONFIG_ROOT/$f" "$LOCAL_ROOT/$f"; then
+      DIFF_FILES+=("$f")
+    fi
+  done
+  echo ""
+
+  # Report any differences if files already exist
+  if [[ ${#DIFF_FILES} -gt 0 ]]; then
+    printf "${WARN}Differences between the system configuration and template were found in...\n"
+    for f in ${DIFF_FILES[@]}; do
+      printf "\t- Difference in $f\n"
+    done
+    printf "${WARN}You will need to manually update the template files to create the required changes.\n"
+  else
+    printf "${INFO}No differences found between the system configuration and the template\n"
+  fi
 fi
 
 # Navigate to local repo, set user email
