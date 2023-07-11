@@ -35,30 +35,61 @@ HOSTNAME="$(hostname)"
 # Sub component within the system (i.e., a secondary machine supporting the main system)
 # For example, a NUC running the RTOS for a Desktop GPU system
 SUB_COMP=""
-GH_ORG="qcr-configs"
-GH_REPO=""
-GH_BRANCH="" #Default Branch to use 
-GH_PATH=""
-GH_TEMPLATE_PATH=""
-GH_TEMPLATE_VARIANT="default"
+
+# Owner of the github repo where things will be synced
+# Set by user when first call sync or install command
+# or set via passed argument
+GH_OWNER=""
+
+# Default branch to use within the repo
+GH_DEFAULT_BRANCH="main"
 
 # The path on the machine where the files are stored. These files
 # are then symlinked to the required destination on the system
-LOCAL_PATH="/opt/qcr"
+STORE_PATH="/opt/qcr"
 
 # Location where original files are stored, for when
 # restore is called
-TRASH=/var/qcr/removed
-
-TOKEN_PASS=""
-
-
+BACK_UP_PATH=/var/qcr/back-up
 
 
 
 #################
 ### FUNCTIONS ###
 #################
+
+function _create_directory_and_set_ownership() {
+    # Creates a provided directory and sets
+    # the owner and group as avaiable
+
+    # Make local path directory, and set owner
+    sudo mkdir -p $1
+
+    # Change owner and group if user is set to root
+    FUSER=$(stat -c '%U' $1)
+    if [ "$FUSER" == "root" ]; then
+        if [ $(compgen -u | grep qcr) ]; then
+            # User qcr exists
+            if [ $(compgen -g | grep qcr_users) ]; then
+                # Group qcr_users exist
+                sudo chown qcr:qcr_users $1
+            else
+                # Group qcr_users doesn't exist
+                sudo chown qcr:qcr $1
+            fi
+        else
+            # User qcr doesn't exist
+            if [ $(compgen -g | grep qcr_users) ]; then
+                # Group qcr_users exist
+                sudo chown $USER:qcr_users $1
+            else
+                # Group qcr_users doesn't exist
+                sudo chown $USER:$USER $1
+            fi
+        fi
+    fi
+}
+
 
 function _root_check() {
   if [ "$EUID" -ne 0 ]; then echo "Please re-run with sudo."; exit 1; fi
@@ -79,6 +110,19 @@ function _get_sub_component() {
   fi 
 }
 
+
+function _prompt() {
+  while true; do
+  read -p "$1 (Y/n): " yn
+  case $yn in 
+	[yY]|"" ) echo 1;
+		break;;
+	[nN]|"" ) echo 0;
+        break;;
+	* ) echo invalid response;;
+  esac
+  done
+}
 
 
 function display_heading() {

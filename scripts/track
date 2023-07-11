@@ -82,7 +82,7 @@ function _track() {
     fi
 
     # Destination is where the symlinked file will be located
-    # actual file will live at $ROOT/$destination
+    # actual file will live at $SRC_PATH/$destination
     target="$(realpath -s "$TARGET_FILE")"
     destination=$target
 
@@ -100,45 +100,45 @@ function _track() {
     # Add requested config
     if [ "$RESTORE" == "0" ]; then
         # Make source location
-        mkdir -p "$(dirname "$ROOT$target")"
+        mkdir -p "$(dirname "$SRC_PATH$target")"
 
         # Check existence of target
         if [ -e "$target" ]; then
             # Move target to source location
-            rsync -r -a  "$target" "$ROOT$destination$postfix"
+            rsync -r -a  "$target" "$SRC_PATH$destination$postfix"
 
-            # Put original file in a back-up trash location
-            mkdir -p "$TRASH/$(dirname $target)"
-            rsync -r -a -p --remove-source-files "$target" "$TRASH/$destination"
+            # Put original file in a back-up location
+            mkdir -p $(dirname "$BACK_UP_PATH/$destination")
+            rsync -r -a -p --remove-source-files "$target" "$BACK_UP_PATH/$destination"
             
             # Remove target
             rm -rf $target
             
-            printf "  - Moved: $target to $ROOT$destination$postfix\n"
+            printf "  - Moved: $target to $SRC_PATH$destination$postfix\n"
         else
             # Create file
-            sudo touch "$ROOT$destination"
+            touch "$SRC_PATH$destination"
         fi
 
         # If delete is not set
         if [ "$DELETE" == "0" ]; then
             # Create symlink and change ownership
-            sudo ln -s "$ROOT$target" "$destination"
-            sudo chown -h --reference "$ROOT$destination" "$destination"
-            printf "  - Symlinked: $ROOT$destination to $destination\n"
+            ln -s "$SRC_PATH$target" "$destination"
+            # chown -h --reference "$SRC_PATH$destination" "$destination"
+            printf "  - Symlinked: $SRC_PATH$destination to $destination\n"
         fi
     else
-      # Restore the file from the back-up trash location
-        if [ -e "$TRASH$target" ]; then
+      # Restore the file from the back-up location
+        if [ -e "$BACK_UP_PATH$target" ]; then
             rm -rf $destination
             
             mkdir -p "$(dirname $destination)"
             
-            rsync -r -a -p --remove-source-files "$TRASH$target" "$destination"
-            # rm -rf $ROOT$target
-            # rm -rf $TRASH$target
+            rsync -r -a -p --remove-source-files "$BACK_UP_PATH$target" "$destination"
+            # rm -rf $SRC_PATH$target
+            # rm -rf $BACK_UP_PATH$target
 
-            printf "  - Restored $TRASH$target to $destination\n"
+            printf "  - Restored $BACK_UP_PATH$target to $destination\n"
         fi
     fi
 
@@ -149,7 +149,7 @@ function _track() {
 ### MAIN SCRIPT ###
 ###################
 
-
+# Set shell options, enter help set in terminal for definitions
 set -euo pipefail
 
 # Source common
@@ -169,8 +169,8 @@ while [[ $# -gt 0 ]]; do
       SUB_COMP="$2"
       shift 2
       ;;
-    -lp|-l|--local-path)
-      LOCAL_PATH="$2"
+    -sp|-l|--store-path)
+      STORE_PATH="$2"
       shift 2
       ;;
     -d|--delete)
@@ -192,21 +192,23 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Root check
-_root_check
+# Make sure top level directories exist
+# and have correct ownership
+_create_directory_and_set_ownership $STORE_PATH
+_create_directory_and_set_ownership $BACK_UP_PATH
 
 # Get sub-component, which according to OUT001 (Naming Conventions), is everything after the first hyphen
 if [ "$SUB_COMP" == "" ]; then
   SUB_COMP=$(_get_sub_component $HOSTNAME)
 fi
 
-# Get base hostname, which according to OUT001 (Naming Conventions), is everything prior to the first hyphen
+# Set repo name, based on the hostname, which according to OUT001 (Naming Conventions), is everything prior to the first hyphen
 HOSTNAME=$(_get_base_name $HOSTNAME)
 GH_REPO="system-configs-$HOSTNAME"
 
-# Root path where files are to be stored and symlinked from
-ROOT=$LOCAL_PATH/$GH_REPO/$SUB_COMP/
-mkdir -p $ROOT
+# Create source path where files are to be stored and symlinked from
+SRC_PATH=$STORE_PATH/$GH_REPO/$SUB_COMP/
+mkdir -p $SRC_PATH
 
 # Error checking, need at least one file
 if [ ${#TARGET_FILES[@]} -eq 0 ]; then
@@ -217,7 +219,7 @@ fi
 # Print info
 printf "\n${INFO}Hostname: ${HOSTNAME}\n"
 printf "${INFO}Sub-Component: $SUB_COMP\n"
-printf "${INFO}Configuration Path: $ROOT\n"
+printf "${INFO}Source Path: $SRC_PATH\n"
 
 # Display heading
 display_heading "Tracking Files"

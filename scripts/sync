@@ -5,6 +5,11 @@
 #
 # For more details, see https://docs.qcr.ai/reference/resources/config_tracking_tool/
 
+
+#################
+### VARIABLES ###
+#################
+
 TOKEN=$(cat <<EOF
 -----BEGIN PGP MESSAGE-----
 
@@ -16,48 +21,48 @@ haXQ+AldWkekERAacZer
 EOF
 )
 
-function _root_check() {
-  if [ "$EUID" -ne 0 ]; then echo "Please re-run with sudo."; exit 1; fi
+
+# The name of this script, and the directory where it is located
+SCRIPT_NAME="$(basename $(readlink -f $0))"
+SCRIPT_DIR="$(dirname $(readlink -f $0))"
+
+# User config directory and files
+UC_DIR=$(dirname ${SCRIPT_DIR})/.user_config
+DEFAULTS_FILE=${UC_DIR}/defaults
+ENC_TOKEN_FILE=${UC_DIR}/enc_token
+
+# Source common
+source ${SCRIPT_DIR}/common
+
+# Variables
+PULL=1
+GH_TOKEN=""
+GH_REPO=""
+GH_PATH=""
+GH_BRANCH=$GH_DEFAULT_BRANCH
+
+#################
+### FUNCTIONS ###
+#################
+
+function print_usage(){
+    printf "\nSyncs a set of tracked files with a remote repository.
+    
+Usage:
+    system_configs [-h|--help] sync <github_user_email>
+
+"
+
 }
 
-function _prompt() {
-  while true; do
-  read -p "$1 (Y/n): " yn
-  case $yn in 
-	[yY]|"" ) echo 1;
-		break;;
-	[nN]|"" ) echo 0;
-        break;;
-	* ) echo invalid response;;
-  esac
-  done
-}
-
-function _get_base_name() {
-  IFS='-' read -ra PARTS <<< $1
-  echo ${PARTS[0]}
-}
 
 function _check_local() {
+  # Checks to see if a directory is a git repository
   if [ ! -e "$1/.git" ]; then
     echo 1
     return
   fi
   echo 0
-}
-
-function _get_oauth_token() {
-  pass=$1
-  if [ "$pass" == "" ]; then
-    read -s -p "GitHub Token Password: " pass
-  fi
-  
-  echo "$TOKEN" | gpg --batch --yes --armor --decrypt --passphrase $pass 2>/dev/null
-  RESULT=$?
-  
-  if [ "$RESULT" != "0" ]; then
-    return 1
-  fi
 }
 
 function _check_remote() {
@@ -74,6 +79,7 @@ function _check_remote() {
 }
 
 function _create_remote() {
+  # Create remote github repository
     curl -s -X POST \
         -H "Accept: application/vnd.github+json" \
         -H "Authorization: Bearer $GH_TOKEN" \
@@ -81,218 +87,188 @@ function _create_remote() {
         "https://api.github.com/orgs/$1/repos"
 }
 
-function _init_local() {
-    pushd $1 >/dev/null
-    git init
-    git remote add origin ''
-    git config --system --add safe.directory $1/$2
-    popd >/dev/null
+function _create_local() {
+  # Arguments: <LOCAL_REPO_PATH> <GH_OWNER> <GH_REPO> <BRANCH>
+
+  # Navigate to local repo and init
+  pushd $1 >/dev/null
+  git init
+
+  # Configure git
+  git config --local init.defaultBranch $4
+  git config --local user.name qcr
+  git config --local user.email "qcrbot@qut.edu.au"
+
+  # Create, and commit readme
+  echo "# $3" > README.md
+  git add README.md
+  git commit -m "Initial commit from QCR system-configs tool"
+  git branch -M $4
+  git remote add origin git@github.com:$2/$3.git
+  git push -u origin $4
+  popd >/dev/null
 }
 
-function _get_local() {
-    pushd $1 >/dev/null
-    git remote get-url origin
-    popd >/dev/null
-}
-
-function _update_local() {
-    pushd $1 >/dev/null
-    git remote set-url origin https://oauth2:$GH_TOKEN@github.com/$2
-    popd >/dev/null
-}
-
-function _restore_local() {
-    pushd $1 >/dev/null
-    git remote set-url origin $2
-    popd >/dev/null
-}
-
-function _sanitise_local() {
-    pushd $1 >/dev/null
-    git remote set-url origin git@github.com:$2
-    popd >/dev/null
-}
-
-function _set_git_config() {
-    pushd $1 >/dev/null
-    git config --global user.email $(su $SUDO_USER /bin/bash -c 'git config --get user.email')
-    git config --global user.name $(su $SUDO_USER /bin/bash -c 'git config --get user.name')
-    popd >/dev/null
-}
-
-function _unset_git_config() {
-    pushd $1 >/dev/null
-    git config --unset user.email
-    git config --unset user.name
-    popd >/dev/null
-}
-
-function _get_repo_path() {
-  if [[ "$remote_url" == *"git@"* ]]; then
-    IFS=':' read -ra PARTS <<< $1
-    echo ${PARTS[-1]}
-  else
-    IFS='/' read -ra PARTS <<< $1
-    echo ${PARTS[-2]}/${PARTS[-1]}
+function _check_required_variables() {
+  # Check GH_EMAIL is set
+  if [ -z $GH_EMAIL ]; then
+    printf "${ERROR}You must supply your GitHub user email to sync files.\n"
+    exit 1
   fi
-  
-}
 
-function _update_submodules() {
-  if [ -e ".gitmodules" ]; then
-    sed -i "s/GH_TOKEN/$GH_TOKEN/g" .gitmodules
+  # Check GH_OWNER is set
+  if [ "${GH_OWNER}" == "" ]; then
+    if [ -z ${UC_GH_OWNER} ]; then
+      printf "${ERROR}You must set the default GitHub User via 'system-configs config --owner <user>' or by providing it using the '--owner' argument.\n"
+      exit 1
+    fi
+    GH_OWNER=${UC_GH_OWNER}
   fi
-}
-function _sanitise_submodules() {
-  if [ -e ".gitmodules" ]; then
-    sed -i "s/$GH_TOKEN/GH_TOKEN/g" .gitmodules
+
+  # Check TOKEN is set
+  if [ "${GH_TOKEN}" == "" ]; then
+    if [ ! -e ${ENC_TOKEN_FILE} ]; then
+      printf "${ERROR}You must set the default GitHub PAT (token) via 'system-configs config --pat <token>' or by providing it using the '--token' argument.\n"
+      exit 1
+    fi
+    # Decrypt token
+    GH_TOKEN=$(gpg --decrypt ${ENC_TOKEN_FILE})
   fi
 }
 
-function _add_submodules() {
-  for f in $(find . -not -path "./.git/HEAD" | grep .git/HEAD); do
-    module_path=$(dirname $(dirname $f))
-    pushd $module_path >/dev/null
-    remote_url=$(git remote get-url origin)
-    popd >/dev/null
-    
-    git submodule add https://oauth2:$GH_TOKEN@github.com/$(_get_repo_path $remote_url) $module_path
-    git submodule absorbgitdirs $module_path
-  done
-}
 
-# Default Parameters
-HOSTNAME="$(hostname)"   #system Hostname
-VARIANT=""    #Hardware Variant to be used
-GH_ORG="qcr-configs"
-GH_REPO=""
-GH_BRANCH="" #Default Branch to use 
-GH_PATH=""
-LOCAL_PATH="/opt/qcr"       #Alternative <Hostname>_system_configs file location if repo not accessible
-TOKEN_PASS=""
-NEW_BRANCH=0
-PULL=1
+###################
+### MAIN SCRIPT ###
+###################
 
+# Source user config
+if [ -e ${DEFAULTS_FILE} ]; then
+  source ${DEFAULTS_FILE}
+fi
+
+# Parse Arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
-    -h|--host|--hostname)
+    -H|--host|--hostname)
       HOSTNAME="$2"
-      shift
-      shift
+      shift 2
       ;;
     -b|--branch)
       GH_BRANCH="$2"
-      shift
-      shift
+      shift 2
       ;;
-    -lp|-l|--local-path)
-      LOCAL_PATH="$2"
-      shift
-      shift
+    -sp|-l|--store-path)
+      STORE_PATH="$2"
+      shift 2
       ;;
     -c|--create-remote)
-      CREATE_REMOTE=1
+      CREATE_REMOTE=0
       shift
       ;;
     -o|--owner)
-      GH_ORG="$2"
-      shift
-      shift
+      GH_OWNER="$2"
+      shift 2
       ;;
     -np|--no-pull)
       PULL=1
       shift
       ;;
-    --pass)
-      TOKEN_PASS="$2"
-      shift
-      shift
+    -p|--pat)
+      GH_TOKEN="$2"
+      shift 2
       ;;
     *)
-      echo "Invalid argument: \"$1\""
-      exit 1
+      if [ -z "$GH_EMAIL" ]; then
+        GH_EMAIL="$1"
+        shift
+      else
+        echo "Invalid argument: \"$1\""
+        exit 1
+      fi
   esac
 done
 
-_root_check
 
-GH_TOKEN=$(_get_oauth_token $TOKEN_PASS)
+# Make sure top level directories exist
+# and have correct ownership
+_create_directory_and_set_ownership $STORE_PATH
+_create_directory_and_set_ownership $BACK_UP_PATH
 
-if [ "$?" == "1" ]; then
-    echo 'Invalid token password';
-    exit 1
-fi
+# Check required variables are set
+# Either from command line or user config
+_check_required_variables
 
+# Set repo name
 HOSTNAME=$(_get_base_name $HOSTNAME)
 GH_REPO="system-configs-$HOSTNAME"
 
-GH_PATH="$GH_ORG/$GH_REPO"
+# Set github path and local repo root path (root)
+GH_PATH="$GH_OWNER/$GH_REPO"
+LOCAL_ROOT=$STORE_PATH/$GH_REPO
 
-ROOT=$LOCAL_PATH/$GH_REPO
+# Make sure local root exists
+mkdir -p $LOCAL_ROOT
 
-echo "Hostname: $(hostname)"
-echo "Local Machine Base": $HOSTNAME
-echo "Configuration Path: $ROOT"
-echo "Machine Repository: https://github.com/$GH_PATH"
-echo "Branch: $GH_BRANCH"
+# Print information to user
+printf "\n${INFO}Hostname: $HOSTNAME\n"
+printf "${INFO}Local Repo Path: $LOCAL_ROOT\n"
+printf "${INFO}Machine Repository: https://github.com/$GH_PATH\n"
+printf "${INFO}Branch: $GH_BRANCH\n"
+printf "${INFO}GitHub Email: $GH_EMAIL\n\n"
 
+# Create remote if it doesn't exist
 if [ "$(_check_remote $GH_PATH)" == "0" ]; then
     if [ "$CREATE_REMOTE" == "1" ] || [ "$(_prompt 'Remote does not exist. Create it?')" == "1" ]; then
-        echo 'Creating remote...'
-        _create_remote $GH_ORG $GH_REPO
+        printf "${INFO}Attempting to create remote...\n"
+        printf "\t- Owner: ${GH_OWNER}\n"
+        printf "\t- Repo: ${GH_REPO}\n"
+        _create_remote $GH_OWNER $GH_REPO
     else
-        echo 'Unable to continue, nothing to do...'
+        printf "${INFO}Unable to continue, nothing to do...\n"
         exit 0
     fi
 fi
 
-if [ "$(_check_local $ROOT)" == "1" ]; then
-    _init_local $ROOT $GH_PATH
+# Create/init local repo if required
+if [ "$(_check_local $LOCAL_ROOT)" == "1" ]; then
+    printf "\n${INFO}Initialising local repo...\n"
+    _create_local $LOCAL_ROOT $GH_OWNER $GH_REPO $GH_DEFAULT_BRANCH
 fi
 
-LOCAL_URL=$(_get_local $ROOT)
-
-_update_local $ROOT $GH_PATH
-
-pushd $ROOT >/dev/null
-
-_update_submodules
-
+# Pull down latest
 if [ "$PULL" == "1" ]; then
+    # TODO: Deal with local changes, merge conflicts, etc.
+    printf "\n${INFO}Pulling from remote...\n"
     git pull
 fi
 
-_add_submodules
+# Navigate to local repo, set user email
+# GitHub uses user email to show committer not GitHub username
+pushd $LOCAL_ROOT >/dev/null
+git config user.email $GH_EMAIL
 
-_sanitise_submodules
-
-git add .
-
-if [ "$GH_BRANCH" != "" ]; then
-    git checkout $GH_BRANCH 2>/dev/null
-    if [ "$?" != "0" ]; then
-        git branch $GH_BRANCH
-        git checkout $GH_BRANCH
-    fi
+# Move to desired branch
+printf "\n${INFO}Checking out branch ${GH_BRANCH}...\n"
+git checkout $GH_BRANCH 2>/dev/null
+if [ "$?" != "0" ]; then
+    git branch $GH_BRANCH
+    git checkout $GH_BRANCH
 fi
 
-_set_git_config $ROOT
-git commit -m 'Automated commit made by QCR sync tools'
-_unset_git_config $ROOT
+# Add and commit
+printf "\n${INFO}Adding and committing files...\n"
+git add .
+git commit -m 'Commit made by QCR system-config tools'
 
+# Check if remote branch exists, and push to branch
+printf "\n${INFO}Pushing local to remote...\n"
 EXISTS=$(git branch -l -a | grep "remotes/origin/$GH_BRANCH")
-
 if [ "$EXISTS" == "" ]; then
     git push --set-upstream origin $GH_BRANCH
 else
     git push
 fi
 
+# Move back to original directory
 popd
-
-if [ "$LOCAL_URL" != "" ]; then
-    _restore_local $ROOT $LOCAL_URL
-else
-    _sanitise_local $ROOT $GH_PATH
-fi
 
