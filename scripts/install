@@ -8,188 +8,114 @@
 #
 # For more details, see https://docs.qcr.ai/reference/resources/config_tracking_tool/
 
-TOKEN=$(cat <<EOF
------BEGIN PGP MESSAGE-----
 
-jA0ECQMC3dcjUYabUyD/0l4BYKDynWFMV507QwSkXcDTzVZ9wu436o4s8iLFnamg
-c+cJaZU0Yn29aLKestHAjsjJMZfCbXeykrVJ2pk6CAy7fCwBzsPf9Ukd+QBdRnZO
-haXQ+AldWkekERAacZer
-=evG6
------END PGP MESSAGE-----
-EOF
-)
 
-function _root_check() {
-  if [ "$EUID" -ne 0 ]; then echo "Please re-run with sudo."; exit 1; fi
-}
+#################
+### VARIABLES ###
+#################
 
-function _prompt() {
-  while true; do
-  read -p "$1 (Y/n): " yn
-  case $yn in 
-	[yY]|"" ) echo 1;
-		break;;
-	[nN]|"" ) echo 0;
-        break;;
-	* ) echo invalid response;;
-  esac
-  done
-}
 
-function _check_local() {
-  if [ ! -e "$1/.git" ]; then
-    echo 1
-    return
-  fi
-  echo 0
-}
+# The name of this script, and the directory where it is located
+SCRIPT_NAME="$(basename $(readlink -f $0))"
+SCRIPT_DIR="$(dirname $(readlink -f $0))"
 
-function _get_oauth_token() {
-  pass=$1
-  if [ "$pass" == "" ]; then
-    read -s -p "GitHub Token Password: " pass
-  fi
-  
-  echo "$TOKEN" | gpg --batch --yes --armor --decrypt --passphrase $pass 2>/dev/null
-  RESULT=$?
-  
-  if [ "$RESULT" != "0" ]; then
-    return 1
-  fi
-}
-
-function _check_remote() {
-    STATUS=$(curl -I -s \
-        -H "Accept: application/vnd.github+json" \
-        -H "Authorization: Bearer $GH_TOKEN" \
-        https://api.github.com/repos/$1 | head -n 1|cut -d$' ' -f2)
-    
-    if [ "$STATUS" == "200" ]; then
-        echo 1
-    else
-        echo 0
-    fi
-}
-
-function _create_remote() {
-    curl -s -X POST \
-        -H "Accept: application/vnd.github+json" \
-        -H "Authorization: Bearer $GH_TOKEN" \
-        -d "{\"name\":\"$2\",\"description\":\"System configuration files for $2\", \"private\": true,\"auto_init\": true, \"has_issues\": true,\"has_projects\": true,\"has_wiki\":true}" \
-        "https://api.github.com/orgs/$1/repos"       
-}
-
-function _get_remote() {
-    echo "Cloning https://github.com/$1"
-    git clone https://oauth2:$GH_TOKEN@github.com/$1 $2
-
-    pushd $2
-    if [ -e '.gitmodules' ]; then
-      _update_submodules
-      git submodule update --init --recursive
-    fi
-    popd
-}
-
-function _get_variant() {
-  IFS='-' read -ra PARTS <<< $1
-  VARIANT=$(IFS=- ; echo "${PARTS[*]:1}")
-  if [ "$VARIANT" != "" ]; then
-    echo $VARIANT
-  else
-    echo "default"
-  fi 
-}
-
-function _get_base_name() {
-  IFS='-' read -ra PARTS <<< $1
-  echo ${PARTS[0]}
-}
-
-function _get_remote_org() {
-  IFS='/' read -ra PARTS <<< $1
-  echo ${PARTS[0]}
-}
-
-function _get_repo_name() {
-  IFS='/' read -ra PARTS <<< $1
-  echo ${PARTS[1]}
-}
-
-function _update_submodules() {
-  if [ -e ".gitmodules" ]; then
-    sed -i "s/GH_TOKEN/$GH_TOKEN/g" .gitmodules
-  fi
-}
+# User config directory and files
+UC_DIR=$(dirname ${SCRIPT_DIR})/.user_config
+DEFAULTS_FILE=${UC_DIR}/defaults
+ENC_TOKEN_FILE=${UC_DIR}/enc_token
 
 # Default Parameters
-HOSTNAME="$(hostname)"   #system Hostname
-VARIANT=""    #Hardware Variant to be used
-GH_ORG="qcr-configs"
 GH_REPO=""
-GH_BRANCH="" #Default Branch to use 
-GH_PATH=""
-GH_TEMPLATE_PATH=""
-GH_TEMPLATE_VARIANT="default"
-LOCAL_PATH="/opt/qcr"       #Alternative <Hostname>_system_configs file location if repo not accessible
-NO_REMOTE=0
-CREATE_REMOTE=0
-TOKEN_PASS=""
-RUN_INSTALL=1    #Flag to run default install script from configs
+GH_BRANCH=""
+# GH_PATH=""
+GH_TOKEN=""
+CREATE_REMOTE=1
+
+# GH_TEMPLATE_PATH=""
+# GH_TEMPLATE_VARIANT="default"
+
+
+
+#################
+### FUNCTIONS ###
+#################
+
+function print_usage(){
+    printf "\nInstalls a system configuration from a remote repository.
+    
+Usage:
+    system_configs [-h|--help] install
+
+"
+
+}
+
+
+function _check_required_variables() {
+  # Arguments: <GH_PATH>
+
+  # Check GH_BRANCH is set
+  if [ "$GH_BRANCH" == "" ]; then
+    GH_BRANCH=$GH_DEFAULT_BRANCH
+  fi
+
+  # Check GH_TOKEN is set 
+  # Only required if installing from a template, and remote doesn't exist
+  if [ "$GH_TOKEN" == "" ] && [ ! -z $TEMPLATE ] && [ "$(_check_remote_using_ssh $1)" == "0" ]; then
+    if [ ! -e ${ENC_TOKEN_FILE} ]; then
+      printf "${ERROR}You must set the default GitHub PAT (token) via 'system-configs config --pat <token>' or by providing it using the '--token' argument.\n"
+      exit 1
+    fi
+    # Decrypt token
+    GH_TOKEN=$(gpg --decrypt ${ENC_TOKEN_FILE})
+  fi
+}
+
+
+###################
+### MAIN SCRIPT ###
+###################
+
+# Source common
+source ${SCRIPT_DIR}/common
+
+# Source user config
+if [ -e ${DEFAULTS_FILE} ]; then
+  source ${DEFAULTS_FILE}
+fi
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    -h|--host|--hostname)
+    -h|--help) 
+      print_usage
+      exit 0;;
+    -H|--host|--hostname)
       HOSTNAME="$2"
-      shift
-      shift
+      shift 2
       ;;
-    -hw|--hadware-variant)
-      VARIANT="$2"
-      shift
-      shift
+    -s|--sub-component)
+      SUB_COMP="$2"
+      shift 2
       ;;
     -t|--template)
-      GH_TEMPLATE_PATH="$2"
-      shift
-      shift
-      ;;
-    -thw|--template-variant)
-      GH_TEMPLATE_VARIANT="$2"
-      shift
-      shift
+      TEMPLATE="$2"
+      shift 2
       ;;
     -b|--branch)
       GH_BRANCH="$2"
-      shift
-      shift
+      shift 2
       ;;
-    -lp|-l|--local-path)
-      LOCAL_PATH="$2"
-      shift
-      shift
-      ;;
-    -ni|--no-install)
-       RUN_INSTALL=0
-       shift
-       ;;
-    -c|--create-remote)
-      CREATE_REMOTE=1
-      shift
+    -sp|--store-path)
+      STORE_PATH="$2"
+      shift 2
       ;;
     -o|--owner)
-      GH_ORG="$2"
-      shift
-      shift
+      GH_OWNER="$2"
+      shift 2
       ;;
-    --pass)
-      TOKEN_PASS="$2"
-      shift
-      shift
-      ;;
-    -ng|--no-remote)
-      NO_REMOTE=1
-      shift
+    -p|--pat)
+      GH_TOKEN="$2"
+      shift 2
       ;;
     *)
       echo "Invalid argument: \"$1\""
@@ -197,175 +123,292 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-_root_check
+# Make sure top level directories exist
+# and have correct ownership
+_create_directory_and_set_ownership $STORE_PATH
+_create_directory_and_set_ownership $BACK_UP_PATH
 
-if [ "$NO_REMOTE" == "0" ]; then
-  GH_TOKEN=$(_get_oauth_token $TOKEN_PASS)
-
-  if [ "$?" == "1" ]; then
-    echo 'Invalid token password';
+# Check owner variable is set
+if [ "${GH_OWNER}" == "" ]; then
+  if [ -z ${UC_GH_OWNER} ]; then
+    printf "${ERROR}You must set the default GitHub User via 'system-configs config --owner <user>' or by providing it using the '--owner' argument.\n"
     exit 1
   fi
+  GH_OWNER=${UC_GH_OWNER}
 fi
 
-if [ "$VARIANT" == "" ]; then
-  VARIANT=$(_get_variant $HOSTNAME)
+# Set sub-component and hostname variables
+if [ "$SUB_COMP" == "" ]; then
+  SUB_COMP=$(_get_sub_component $HOSTNAME)
 fi
-
 HOSTNAME=$(_get_base_name $HOSTNAME)
+
+# Set system configuration variables
 GH_REPO="system-configs-$HOSTNAME"
+LOCAL_ROOT=$STORE_PATH/$GH_REPO
+GH_PATH=$GH_OWNER/$GH_REPO
 
-GH_PATH="$GH_ORG/$GH_REPO"
-_USE_TEMPLATE=0
-
-if [ "$GH_TEMPLATE_PATH" != "" ] && [ "$GH_TEMPLATE_PATH" != "$_GH_PATH" ]; then
-  _GH_TEMPLATE_ORG=$(_get_remote_org $GH_TEMPLATE_PATH)
-  _GH_TEMPLATE_REPO=$(_get_repo_name $GH_TEMPLATE_PATH)
-  _USE_TEMPLATE=1
+# Set template configuration variables
+if [ ! -z $TEMPLATE ]; then
+  GH_TEMPLATE_REPO="template-$TEMPLATE"
+  TEMPLATE_ROOT=$STORE_PATH/$GH_TEMPLATE_REPO
+  GH_TEMPLATE_PATH=$GH_OWNER/$GH_TEMPLATE_REPO
 fi
+  
+# Check remaining required variables are set
+# Either from command line or user config
+_check_required_variables $GH_PATH
 
-ROOT=$LOCAL_PATH/$GH_REPO/$VARIANT/
+# Print information
+printf "\n${INFO}Hostname: $HOSTNAME\n"
+printf "${INFO}GitHub Owner: $GH_OWNER\n"
+printf "${INFO}GitHub Branch: $GH_BRANCH\n"
+printf "${INFO}System Configuration Details:\n"
+printf "\t- GitHub Repo: $GH_REPO\n"
+printf "\t- Local Repo Path: $LOCAL_ROOT\n"
+printf "\t- Remote Repository: https://github.com/$GH_PATH\n"
+if [ ! -z $TEMPLATE ]; then
+  printf "${INFO}Template Configuration Details:\n"
+  printf "\t- GitHub Repo: $GH_TEMPLATE_REPO\n"
+  printf "\t- Local Repo Path: $TEMPLATE_ROOT\n"
+  printf "\t- Remote Repository: https://github.com/$GH_TEMPLATE_PATH\n"
+fi
+printf "${INFO}Installing Sub-Component: $SUB_COMP\n"
 
-echo "Hostname: $(hostname)"
-echo "Local Machine Base": $HOSTNAME
-echo "Machine Variant: $VARIANT"
-echo "Configuration Path: $ROOT"
 
-if [ "$NO_REMOTE" == "0" ]; then
-  echo "Machine Repository: https://github.com/$GH_PATH"
-
-  if [ "$_USE_TEMPLATE" == "1" ]; then
-    echo "Template Repository: https://github.com/$GH_TEMPLATE_PATH"
+# Installing/updating from template or not
+if [ -z $TEMPLATE ]; then
+  # Not installing from template
+  
+  # check remote repo exists
+  if [ "$(_check_remote_using_ssh $GH_PATH)" == "0" ]; then
+    printf "\n${ERROR}Cannot install system configuration '${YELLOW}${GH_REPO}${RESET}' as the remote '${YELLOW}${GH_PATH}${RESET}' does not exist.\n"
+    exit 1
   fi
 
-  echo -n "Branch: "
-  if [ "$GH_BRANCH" != "" ]; then
-    echo $GH_BRANCH
-  else
-    echo "default"
+  # Does local repo exist
+  if [ "$(_check_local $LOCAL_ROOT)" == "0" ]; then
+    # Clone remote
+    printf "\n${INFO}Cloning system configuration repo...\n"
+    git clone git@github.com:$GH_PATH.git $LOCAL_ROOT  
   fi
-fi
 
-echo -n "Installing: "
-if [ "$RUN_INSTALL" == "1" ]; then
-  echo "yes"
 else
-  echo "no"
-fi
+  # Installing/updating from template
 
-echo "-------------------------------------------"
-if [ "$NO_REMOTE" == "0" ]; then
-  if [ "$(_check_remote $GH_PATH)" == "0" ]; then
+  # check existence of remote template configuration repo
+  if [ "$(_check_remote_using_ssh $GH_TEMPLATE_PATH)" == "0" ]; then
+    printf "\n${ERROR}Cannot install template configuration '${YELLOW}${GH_TEMPLATE_REPO}${RESET}' as the remote '${YELLOW}${GH_TEMPLATE_PATH}${RESET}' does not exist.\n"
+    exit 1
+  fi
+
+  # Check existence of local and remote system configuration repos
+  if [ "$(_check_local $LOCAL_ROOT)" == "0" ] && [ "$(_check_remote_using_ssh $GH_PATH)" == "1" ]; then
+    # Local system configuration repo doesn't exist
+    # Remote system configuration repo does exist
+
+    # Clone remote
+    printf "\n${INFO}Cloning system configuration repo...\n"
+    git clone git@github.com:$GH_PATH.git $LOCAL_ROOT
+
+  elif [ "$(_check_local $LOCAL_ROOT)" == "0" ] && [ "$(_check_remote_using_ssh $GH_PATH)" == "0" ]; then
+    # Local system configuration repo doesn't exist
+    # Remote system configuration repo doesn't exist
+    
+    # Create remote 
     if [ "$CREATE_REMOTE" == "1" ] || [ "$(_prompt 'Remote does not exist. Create it?')" == "1" ]; then
-      echo 'Creating remote...'
-      _create_remote $GH_ORG $GH_REPO
+        printf "${INFO}Attempting to create remote...\n"
+        printf "\t- Owner: ${GH_OWNER}\n"
+        printf "\t- Repo: ${GH_REPO}\n"
+        _create_remote $GH_OWNER $GH_REPO
     else
-      echo 'Unable to continue, nothing to do...'
-      exit 0
+        printf "${INFO}Unable to continue, nothing to do...\n"
+        exit 0
     fi
+
+    # Initialise local
+    printf "\n${INFO}Initialising local repo...\n"
+    _create_local $LOCAL_ROOT $GH_OWNER $GH_REPO $GH_DEFAULT_BRANCH
+
   fi
 
-  if [ "$(_check_local $LOCAL_PATH/$GH_REPO)" == "1" ]; then
-    _get_remote $GH_PATH $LOCAL_PATH/$GH_REPO
-    git config --system --add safe.directory $LOCAL_PATH/$GH_REPO
-
-    if [ "$GH_BRANCH" != "" ]; then
-      pushd $LOCAL_PATH/$GH_REPO
-      git checkout $GH_BRANCH
-      popd
-    fi
-  fi
 fi
 
+# At this point, we should have
+# 1) A remote system configuration for this machine
+# 2) A local repo for the system configuration
+# however, the local and remote could have differences
 
-mkdir -p $ROOT
-
-if [ "$_USE_TEMPLATE" == "1" ]; then
-  echo "Fetching template..."
-  _get_remote $GH_TEMPLATE_PATH /tmp/$_GH_TEMPLATE_REPO
-  rsync -r --progress --exclude '.git' --remove-source-files /tmp/$_GH_TEMPLATE_REPO/$GH_TEMPLATE_VARIANT/* $ROOT
-  rm -rf /tmp/$_GH_TEMPLATE_REPO
+# Check for local changes in system configuration repo
+local_changes=$(git -C "$LOCAL_ROOT" status --porcelain=v1 2>/dev/null | wc -l)
+if [ "$local_changes" != "0" ]; then
+  printf "${WARN}Local changes have been made to the system configuration at '${YELLOW}${LOCAL_ROOT}${RESET}'. Please manually stash or push these changes and then re-run this script."
+  exit 1
 fi
 
-if [ "$RUN_INSTALL" == "1" ]; then
-    echo 'Installing files...'
+# Pull down any updates from remote system configuration
+mkdir -p $LOCAL_ROOT
+pushd $LOCAL_ROOT >/dev/null
+printf "\n${INFO}Pulling from remote system configuration repo...\n"
+git pull
+
+# Move to desired branch on the local system configuration repo
+printf "\n${INFO}Checking out branch ${GH_BRANCH}...\n"
+git checkout $GH_BRANCH 2>/dev/null
+if [ "$?" != "0" ]; then
+    git branch $GH_BRANCH
+    git checkout $GH_BRANCH
+fi
+popd >/dev/null
+
+# At this point, we should have
+# the local and remote system configuration 
+# repos aligned and on the desired branch
 
 
-    TRASH=/var/qcr/removed
+# Clone template
+if [ ! -z $TEMPLATE ]; then
+  mkdir -p $TEMPLATE_ROOT
+  pushd $TEMPLATE_ROOT >/dev/null
 
-    # Loop through all found configs, adding them iteratively
-    pushd $ROOT >/dev/null
-
-    CONTENT=()
-
-    # files to be installed (excluding files inside git submodules)
-    while IFS=  read -r -d $'\0'; do
-      CONTENT+=("$REPLY")
-    done < <(find . \( -type d \( -exec [ -f {}/.git ] \;  \) -prune \) -o \( -type f -not -path "./install/*" \) -print0)
-
-    # git submodules to be installed
-    while IFS=  read -r -d $'\0'; do
-      CONTENT+=("$REPLY")
-    done < <(find . \( -type d \( -exec [ -f {}/.git ] \;  \) \) -print0)
-
-    for c in "${CONTENT[@]}"; do
-      target="/$(realpath --relative-to="$ROOT" "$c")"
-      
-      destination=$target
-
-      if [ -d "$target" ]; then
-        target="$target/"
-      fi
-
-      if [[ -L "$target" ]] && [ "$(readlink -f $target)" == "$(realpath $c)" ]; then
-          echo "Skipping $(realpath $c)"
-          continue
-      fi
-      
-      if [[ $c == *.delete ]]; then
-          target="${target:0:-7}"
-          if [ -f "$target" ]; then
-            echo "Removing $destination..."
-            mkdir -p "$TRASH/$destination"
-            rsync --remove-source-files "$target" "$TRASH/$destination"
-            echo -e "\tMoved $target to $TRASH/$destination"
-          else
-            echo "Skipping $(realpath $c)"
-          fi
-          continue
-      fi
-
-      echo "Installing $c to $target..."
-
-      if [ -f "$target" ]; then
-          mkdir -p "$TRASH/$(dirname $target)"
-          rsync --remove-source-files "$target" "$TRASH/$(dirname $target)"
-          echo -e "\tMoved $target to $TRASH/$(dirname $target)"
-      fi
-
-      if [ -f "$c" ]; then
-        mkdir -p $(dirname $target)
-      fi
-
-      ln -s "$(realpath $c)" "$target"
-      echo -e "\tSymlinked $target to $c"
-    done
-    popd >/dev/null
-    echo "Finished installing all configs."
-
-    echo "-------------------------------------------"
-
-
-
-  if [ -d "${ROOT}install" ] && [ "$(ls -A ${ROOT}install)" ]; then
-    echo 'Running Installation Scripts...'
-    SCRIPTS=$(find "${ROOT}install" -type f)
-    for SCRIPT in $SCRIPTS; do
-        if [ -x $SCRIPT ]; then
-            bash $SCRIPT
-        fi
-    done
+  if [ "$(_check_local $TEMPLATE_ROOT)" == "0" ]; then
+    # Local doesn't exist, clone from remote
+    printf "\n${INFO}Cloning template configuration repo...\n"
+    git clone git@github.com:$GH_TEMPLATE_PATH.git $TEMPLATE_ROOT
   else
-    echo "No install script found at path: $ROOTinstall"
+    # Check for local changes
+    local_changes=$(git -C "$TEMPLATE_ROOT" status --porcelain=v1 2>/dev/null | wc -l)
+    if [ "$local_changes" != "0" ]; then
+      printf "${WARN}You have local changes made to the template configuration at '${YELLOW}${TEMPLATE_ROOT}${RESET}'. Please manually stash or push these changes and then re-run this script."
+    fi
+
+    # Pull down any updates
+    printf "\n${INFO}Pulling from remote template repo...\n"
+    git pull
   fi
+
+  # Move to desired branch
+  printf "\n${INFO}Checking out branch ${GH_BRANCH}...\n"
+  git checkout $GH_BRANCH 2>/dev/null
+  if [ "$?" != "0" ]; then
+      git branch $GH_BRANCH
+      git checkout $GH_BRANCH
+  fi
+  
+  popd >/dev/null
 fi
+
+# At this point we have
+# 1) Local and remote system configuration repos on desired branch and aligned
+# 2) (If installing from a template) Up-to-date local template configuration repo on desired branch
+
+
+# Copy new files from template to local system configuration repo
+if [ ! -z $TEMPLATE ]; then
+
+  # Get configuration files
+  FILES=$(find ${TEMPLATE_ROOT} -type f -not -path "*.git*" -not -name "README.md")
+
+  # Add any missing files to system configuration
+  printf "\n${INFO}Adding files from the template configuration to the system configuration...\n"
+  DIFF_FILES=()
+  for f in ${FILES[@]}; do
+    # Get file path without TEMPLATE_ROOT
+    f="${f//$TEMPLATE_ROOT}"
+
+    # See if already exists in system configuration
+    if [ ! -e ${LOCAL_ROOT}/$f ]; then
+      printf "\t-$f\n"
+      mkdir -p $(dirname $LOCAL_ROOT/$f)
+      rsync $TEMPLATE_ROOT/$f $LOCAL_ROOT/$f
+    elif ! cmp -s "$TEMPLATE_ROOT/$f" "$LOCAL_ROOT/$f"; then
+      DIFF_FILES+=("$f")
+    fi
+  done
+  echo ""
+
+  # Report any differences if files already exist
+  if [[ ${#DIFF_FILES} -gt 0 ]]; then
+    printf "${WARN}Differences between the system configuration and template were found in...\n"
+    for f in ${DIFF_FILES[@]}; do
+      printf "\t- Difference in $f\n"
+    done
+    printf "${WARN}You will need to manually update the system configuration files to create the required changes.\n"
+  else
+    printf "${INFO}No differences found between the template configuration and the system configuration\n"
+  fi
+
+  # Add and commit local system configuration repo
+  pushd $LOCAL_ROOT >/dev/null
+  printf "\n${INFO}Adding and committing files...\n"
+  git add .
+  git commit -m 'Commit made by QCR system-config tools'
+
+  # Push local system configuration repo to remote
+  printf "\n${INFO}Pushing local system configuration to remote...\n"
+  EXISTS=$(git branch -l -a | grep "remotes/origin/$GH_BRANCH")
+  if [ "$EXISTS" == "" ]; then
+      git push --set-upstream origin $GH_BRANCH
+  else
+      git push
+  fi
+  popd >/dev/null
+  
+  # Now have local and remote system configuration repo that is up-to-date with the template
+fi
+
+# Install from local system configuration repo to actual system locations
+INSTALL_ROOT=$LOCAL_ROOT/$SUB_COMP
+pushd $INSTALL_ROOT >/dev/null
+
+# files to be installed
+CONTENT=()
+while IFS=  read -r -d $'\0'; do
+  CONTENT+=("$REPLY")
+done < <(find . \( -type d \( -exec [ -f {}/.git ] \;  \) -prune \) -o \( -type f -not -path "./install/*" \) -print0)
+
+for c in "${CONTENT[@]}"; do
+  # Get target file, without 
+  target="/$(realpath --relative-to="$INSTALL_ROOT" "$c")"
+  destination=$target
+
+  if [ -d "$target" ]; then
+    target="$target/"
+  fi
+
+  if [[ -L "$target" ]] && [ "$(readlink -f $target)" == "$(realpath $c)" ]; then
+      # Symlink already exists
+      echo "Skipping $(realpath $c)"
+      continue
+  fi
+  
+  if [[ $c == *.delete ]]; then
+      target="${target:0:-7}"
+      if [ -f "$target" ]; then
+        echo "Removing $destination..."
+        mkdir -p "$BACK_UP_PATH/$destination"
+        rsync --remove-source-files "$target" "$BACK_UP_PATH/$destination"
+        echo -e "\tMoved $target to $BACK_UP_PATH/$destination"
+      else
+        echo "Skipping $(realpath $c)"
+      fi
+      continue
+  fi
+
+  echo "Installing $c to $target..."
+
+  if [ -f "$target" ]; then
+      mkdir -p "$BACK_UP_PATH/$(dirname $target)"
+      rsync --remove-source-files "$target" "$BACK_UP_PATH/$(dirname $target)"
+      echo -e "\tMoved $target to $BACK_UP_PATH/$(dirname $target)"
+  fi
+
+  if [ -f "$c" ]; then
+    mkdir -p $(dirname $target)
+  fi
+
+  ln -s "$(realpath $c)" "$target"
+  echo -e "\tSymlinked $target to $c"
+done
+popd >/dev/null
+

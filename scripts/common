@@ -92,11 +92,6 @@ function _create_directory_and_set_ownership() {
     fi
 }
 
-
-function _root_check() {
-  if [ "$EUID" -ne 0 ]; then echo "Please re-run with sudo."; exit 1; fi
-}
-
 function _get_base_name() {
   IFS='-' read -ra PARTS <<< $1
   echo ${PARTS[0]}
@@ -110,6 +105,78 @@ function _get_sub_component() {
   else
     echo "default"
   fi 
+}
+
+
+function _check_local() {
+  # Checks to see if a directory is a git repository
+  # Returns 1 if local exists, else 0
+  if [ -e "$1/.git" ]; then
+    echo 1
+    return
+  fi
+  echo 0
+}
+
+function _check_remote_using_ssh() {
+    # Check remote using SSH
+    git ls-remote -q git@github.com:$1 &> /dev/null
+    STATUS=$?
+    if [ "$STATUS" == "0" ]; then
+      echo 1
+    else
+      echo 0
+    fi
+}
+
+function _check_remote_using_pat() {
+    STATUS=$(curl -I -s \
+        -H "Accept: application/vnd.github+json" \
+        -H "Authorization: Bearer $GH_TOKEN" \
+        https://api.github.com/repos/$1 | head -n 1|cut -d$' ' -f2)
+    
+    if [ "$STATUS" == "200" ]; then
+        echo 1
+    else
+        echo 0
+    fi
+}
+
+function _create_remote() {
+    # Create remote github repository
+    # Arguments: <GH_OWNER> <GH_REPO> <GH_TOKEN>
+    curl -s -X POST \
+        -H "Accept: application/vnd.github+json" \
+        -H "Authorization: Bearer $3" \
+        -d "{\"name\":\"$2\",\"description\":\"System configuration files for $2\", \"private\": true,\"auto_init\": false, \"has_issues\": true,\"has_projects\": true,\"has_wiki\":true}" \
+        "https://api.github.com/orgs/$1/repos"
+}
+
+function _create_local() {
+  # Arguments: <LOCAL_REPO_PATH> <GH_OWNER> <GH_REPO> <GH_BRANCH>
+
+  # Make directory if doesn't exists
+  if [ ! -e $1 ]; then
+    mkdir -p $1
+  fi
+
+  # Navigate to local repo and init
+  pushd $1 >/dev/null
+  git init
+
+  # Configure git
+  git config init.defaultBranch $4
+  git config user.name qcrbot
+  git config user.email "qcrbot@qut.edu.au"
+
+  # Create, and commit readme
+  echo "# $3" > README.md
+  git add README.md
+  git commit -m "Initial commit from QCR system-configs tool"
+  git branch -M $4
+  git remote add origin git@github.com:$2/$3.git
+  git push -u origin $4
+  popd >/dev/null
 }
 
 

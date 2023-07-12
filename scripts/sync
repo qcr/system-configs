@@ -41,60 +41,6 @@ Usage:
 
 }
 
-
-function _check_local() {
-  # Checks to see if a directory is a git repository
-  if [ ! -e "$1/.git" ]; then
-    echo 1
-    return
-  fi
-  echo 0
-}
-
-function _check_remote() {
-    STATUS=$(curl -I -s \
-        -H "Accept: application/vnd.github+json" \
-        -H "Authorization: Bearer $GH_TOKEN" \
-        https://api.github.com/repos/$1 | head -n 1|cut -d$' ' -f2)
-    
-    if [ "$STATUS" == "200" ]; then
-        echo 1
-    else
-        echo 0
-    fi
-}
-
-function _create_remote() {
-  # Create remote github repository
-    curl -s -X POST \
-        -H "Accept: application/vnd.github+json" \
-        -H "Authorization: Bearer $GH_TOKEN" \
-        -d "{\"name\":\"$2\",\"description\":\"System configuration files for $2\", \"private\": true,\"auto_init\": false, \"has_issues\": true,\"has_projects\": true,\"has_wiki\":true}" \
-        "https://api.github.com/orgs/$1/repos"
-}
-
-function _create_local() {
-  # Arguments: <LOCAL_REPO_PATH> <GH_OWNER> <GH_REPO> <BRANCH>
-
-  # Navigate to local repo and init
-  pushd $1 >/dev/null
-  git init
-
-  # Configure git
-  git config --local init.defaultBranch $4
-  git config --local user.name qcrbot
-  git config --local user.email "qcrbot@qut.edu.au"
-
-  # Create, and commit readme
-  echo "# $3" > README.md
-  git add README.md
-  git commit -m "Initial commit from QCR system-configs tool"
-  git branch -M $4
-  git remote add origin git@github.com:$2/$3.git
-  git push -u origin $4
-  popd >/dev/null
-}
-
 function _check_required_variables() {
   # Check GH_EMAIL is set
   if [ -z $GH_EMAIL ]; then
@@ -230,7 +176,7 @@ if [ "$(_check_remote $GH_PATH)" == "0" ]; then
         printf "${INFO}Attempting to create remote...\n"
         printf "\t- Owner: ${GH_OWNER}\n"
         printf "\t- Repo: ${GH_REPO}\n"
-        _create_remote $GH_OWNER $GH_REPO
+        _create_remote $GH_OWNER $GH_REPO $GH_TOKEN
     else
         printf "${INFO}Unable to continue, nothing to do...\n"
         exit 0
@@ -238,7 +184,7 @@ if [ "$(_check_remote $GH_PATH)" == "0" ]; then
 fi
 
 # Create/init local repo if required
-if [ "$(_check_local $LOCAL_ROOT)" == "1" ]; then
+if [ "$(_check_local $LOCAL_ROOT)" == "0" ]; then
     printf "\n${INFO}Initialising local repo...\n"
     _create_local $LOCAL_ROOT $GH_OWNER $GH_REPO $GH_DEFAULT_BRANCH
 fi
