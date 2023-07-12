@@ -41,10 +41,10 @@ CREATE_REMOTE=1
 #################
 
 function print_usage(){
-    printf "\nInstalls a system configuration from a remote repository.
+    printf "\nInstalls, or updates, a system or template configuration from a remote repository.
     
 Usage:
-    system_configs [-h|--help] install
+    system_configs [-h|--help] install [-t|--template <name>]
 
 "
 
@@ -367,10 +367,12 @@ while IFS=  read -r -d $'\0'; do
   CONTENT+=("$REPLY")
 done < <(find . \( -type d \( -exec [ -f {}/.git ] \;  \) -prune \) -o \( -type f -not -path "./install/*" \) -print0)
 
+printf "\n${INFO}Installing Files...\n"
 for c in "${CONTENT[@]}"; do
   # Get target file, without 
   target="/$(realpath --relative-to="$INSTALL_ROOT" "$c")"
   destination=$target
+  printf "\n\t${YELLOW}${target}${RESET}\n"
 
   if [ -d "$target" ]; then
     target="$target/"
@@ -378,24 +380,23 @@ for c in "${CONTENT[@]}"; do
 
   if [[ -L "$target" ]] && [ "$(readlink -f $target)" == "$(realpath $c)" ]; then
       # Symlink already exists
-      echo "Skipping $(realpath $c)"
+      printf "\t\tSkipping as symlink already exists\n"
       continue
   fi
   
   if [[ $c == *.delete ]]; then
       target="${target:0:-7}"
       if [ -f "$target" ]; then
-        echo "Removing $destination..."
+        printf "\t\tRemoving to $BACK_UP_PATH/$destination\n"
         mkdir -p "$BACK_UP_PATH/$destination"
         rsync --remove-source-files "$target" "$BACK_UP_PATH/$destination"
-        echo -e "\tMoved $target to $BACK_UP_PATH/$destination"
       else
-        echo "Skipping $(realpath $c)"
+        printf "\t\tSkipping as not present at target location\n"
       fi
       continue
   fi
 
-  echo "Installing $c to $target..."
+  printf "\t\tInstalled\n"
 
   if [ -f "$target" ]; then
       mkdir -p "$BACK_UP_PATH/$(dirname $target)"
@@ -408,7 +409,7 @@ for c in "${CONTENT[@]}"; do
   fi
 
   ln -s "$(realpath $c)" "$target"
-  echo -e "\tSymlinked $target to $c"
+  printf "\t\tSymlinked to ${c}\n"
 done
 popd >/dev/null
 

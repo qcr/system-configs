@@ -194,6 +194,7 @@ if [ "$PULL" == "1" ]; then
     # TODO: Deal with local changes, merge conflicts, etc.
     printf "\n${INFO}Pulling from remote...\n"
     git pull
+    # TODO: pulling down new files doesn't install them
 fi
 
 
