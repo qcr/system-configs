@@ -42,6 +42,8 @@ system-configs config --owner <github_owner> --pat <github_pat>
 
 ### Installing a Configuration
 
+To install a system configuration, assuming the same hostname, use the install command.
+
 ```bash
 system-configs install 
 ```
