@@ -35,7 +35,14 @@ function print_usage(){
     printf "\nSyncs a set of tracked files with a remote repository.
     
 Usage:
-    system_configs [-h|--help] sync <github_user_email>
+    system_configs sync <email> [-h|--help] [-o|--owner <owner>] [-p|--pat <pat>] [-t|--template <name>]
+
+Arguments:
+    sync          <email>   the user's GitHub email perform the sync.
+    -h|--help               prints this help menu.
+    -o|--owner    <owner>   the GitHub owner where the remote should exist, or be created. Set a default using the 'system-configs config' command.
+    -p|--pat      <pat>     a GitHub personal access token (PAT) that can create repos for the given owner. Set a default using the 'system-configs config' command.
+    -t|--template <name>    the name to give to the template, which will be prepended with 'template-'.
 
 "
 
@@ -59,12 +66,10 @@ function _check_required_variables() {
 
   # Check TOKEN is set
   if [ "${GH_TOKEN}" == "" ]; then
-    if [ ! -e ${ENC_TOKEN_FILE} ]; then
-      printf "${ERROR}You must set the default GitHub PAT (token) via 'system-configs config --pat <token>' or by providing it using the '--token' argument.\n"
-      exit 1
+    if [ -e ${ENC_TOKEN_FILE} ]; then
+      # Decrypt token
+      GH_TOKEN=$(gpg --decrypt ${ENC_TOKEN_FILE})
     fi
-    # Decrypt token
-    GH_TOKEN=$(gpg --decrypt ${ENC_TOKEN_FILE})
   fi
 
   # Check GH_BRANCH is set
@@ -171,16 +176,23 @@ printf "${INFO}Local Repo Path: $LOCAL_ROOT\n"
 printf "${INFO}Remote Repository: https://github.com/$GH_PATH\n\n"
 
 # Create remote if it doesn't exist
-if [ "$(_check_remote $GH_PATH)" == "0" ]; then
-    if [ "$CREATE_REMOTE" == "1" ] || [ "$(_prompt 'Remote does not exist. Create it?')" == "1" ]; then
-        printf "${INFO}Attempting to create remote...\n"
-        printf "\t- Owner: ${GH_OWNER}\n"
-        printf "\t- Repo: ${GH_REPO}\n"
-        _create_remote $GH_OWNER $GH_REPO $GH_TOKEN
-    else
-        printf "${INFO}Unable to continue, nothing to do...\n"
-        exit 0
-    fi
+if [ "$(_check_remote_using_ssh $GH_PATH)" == "0" ]; then
+  # Check if a PAT Token is available
+  if [ "${GH_TOKEN}" == "" ]; then
+    printf "${ERROR}The remote ${YELLOW}https://github.com/${GH_PATH}${RESET} and must be created.\nYou can either manually create an empty remote repo, or it can be created via this tool.\nTo be created by this tool you must provide a GitHub Personal Access Token (PAT) either by:\n    - setting the default PAT 'system-configs config --pat <PAT>';\n    - or by providing it using the '--pat <PAT>' argument.\n"
+    exit 1
+  fi
+
+  # Attempt to create remote
+  if [ "$CREATE_REMOTE" == "1" ] || [ "$(_prompt 'Remote does not exist. Create it?')" == "1" ]; then
+      printf "${INFO}Attempting to create remote...\n"
+      printf "\t- Owner: ${GH_OWNER}\n"
+      printf "\t- Repo: ${GH_REPO}\n"
+      _create_remote $GH_OWNER $GH_REPO $GH_TOKEN
+  else
+      printf "${INFO}Unable to continue, nothing to do...\n"
+      exit 0
+  fi
 fi
 
 # Create/init local repo if required

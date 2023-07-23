@@ -1,5 +1,5 @@
 # System Configuration Tracking Tool
-The *system_configs* tool is a series of scripts for managing and tracking of system configuration files. This allows reproducibility of systems, replication of similar systems via the template funcationality, and the traceability of system state configurations. Example files that are tracked may be:
+The *system-configs* tool is a series of scripts for managing and tracking of system configuration files. This allows reproducibility of systems, replication of similar systems via the template funcationality, and the traceability of system state configurations. Example files that are tracked may be:
 
 - Network files relating to static IP's
 - Network settings pertaining to ROS

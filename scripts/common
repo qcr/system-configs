@@ -123,9 +123,9 @@ function _check_remote_using_ssh() {
     git ls-remote -q git@github.com:$1 &> /dev/null
     STATUS=$?
     if [ "$STATUS" == "0" ]; then
-      echo 1
+      echo 1 # exists
     else
-      echo 0
+      echo 0 # doesn't exist
     fi
 }
 

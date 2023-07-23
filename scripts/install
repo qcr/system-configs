@@ -41,10 +41,16 @@ CREATE_REMOTE=1
 #################
 
 function print_usage(){
-    printf "\nInstalls, or updates, a system or template configuration from a remote repository.
+    printf "\nInstalls, or updates, a system configuration, from an existing remote system configuration or template configuration.
     
 Usage:
-    system_configs [-h|--help] install [-t|--template <name>]
+    system_configs install [-h|--help] [-o|--owner] [-p|--pat] [-t|--template <name>]
+
+Arguments:
+    -h|--help
+    -o|--owner    <owner>   the GitHub owner where the remote should exist. Set a default using the 'system-configs config' command.
+    -p|--pat      <pat>     a GitHub personal access token (PAT) that can create repos for the given owner. Set a default using the 'system-configs config' command. Only required when installing from a template configuration.
+    -t|--template <name>    the name of the template to install, do not included the prepended 'template-'.
 
 "
 
@@ -214,13 +220,19 @@ else
   elif [ "$(_check_local $LOCAL_ROOT)" == "0" ] && [ "$(_check_remote_using_ssh $GH_PATH)" == "0" ]; then
     # Local system configuration repo doesn't exist
     # Remote system configuration repo doesn't exist
+
+    # Check if a PAT Token is available
+    if [ "${GH_TOKEN}" == "" ]; then
+      printf "${ERROR}The remote ${YELLOW}https://github.com/${GH_PATH}${RESET} and must be created.\nYou can either manually create an empty remote repo, or it can be created via this tool.\nTo be created by this tool you must provide a GitHub Personal Access Token (PAT) either by:\n    - setting the default PAT 'system-configs config --pat <PAT>';\n    - or by providing it using the '--pat <PAT>' argument.\n"
+      exit 1
+    fi
     
     # Create remote 
     if [ "$CREATE_REMOTE" == "1" ] || [ "$(_prompt 'Remote does not exist. Create it?')" == "1" ]; then
         printf "${INFO}Attempting to create remote...\n"
         printf "\t- Owner: ${GH_OWNER}\n"
         printf "\t- Repo: ${GH_REPO}\n"
-        _create_remote $GH_OWNER $GH_REPO
+        _create_remote $GH_OWNER $GH_REPO $GH_TOKEN
     else
         printf "${INFO}Unable to continue, nothing to do...\n"
         exit 0
@@ -232,6 +244,16 @@ else
 
   fi
 
+fi
+
+# Check local and remote exist
+if [ "$(_check_local $LOCAL_ROOT)" == "0" ]; then
+  printf "${ERROR}An internal error has occurred. The local repo $LOCAL_ROOT should have been created as part of this script, if it didn't already exist. However, it doesn't exist.\n"
+  exit 1
+fi
+if [ "$(_check_remote_using_ssh $GH_PATH)" == "0" ]; then
+  printf "${ERROR}An internal error has occurred. The remote repo ${YELLOW}https://github.com/${GH_PATH}${RESET} should have been created as part of this script, if it didn't already exist. However, it doesn't exist.\n"
+  exit 1
 fi
 
 # At this point, we should have
@@ -280,6 +302,7 @@ if [ ! -z $TEMPLATE ]; then
     local_changes=$(git -C "$TEMPLATE_ROOT" status --porcelain=v1 2>/dev/null | wc -l)
     if [ "$local_changes" != "0" ]; then
       printf "${WARN}You have local changes made to the template configuration at '${YELLOW}${TEMPLATE_ROOT}${RESET}'. Please manually stash or push these changes and then re-run this script."
+      exit 1
     fi
 
     # Pull down any updates
@@ -367,7 +390,7 @@ while IFS=  read -r -d $'\0'; do
   CONTENT+=("$REPLY")
 done < <(find . \( -type d \( -exec [ -f {}/.git ] \;  \) -prune \) -o \( -type f -not -path "./install/*" \) -print0)
 
-printf "\n${INFO}Installing Files...\n"
+printf "\n${INFO}Installing Files..."
 for c in "${CONTENT[@]}"; do
   # Get target file, without 
   target="/$(realpath --relative-to="$INSTALL_ROOT" "$c")"
@@ -396,8 +419,6 @@ for c in "${CONTENT[@]}"; do
       continue
   fi
 
-  printf "\t\tInstalled\n"
-
   if [ -f "$target" ]; then
       mkdir -p "$BACK_UP_PATH/$(dirname $target)"
       rsync --remove-source-files "$target" "$BACK_UP_PATH/$(dirname $target)"
@@ -412,4 +433,18 @@ for c in "${CONTENT[@]}"; do
   printf "\t\tSymlinked to ${c}\n"
 done
 popd >/dev/null
+
+# Run any install scripts found
+printf "\n${INFO}Running any install scripts...\n"
+if [ -d "${INSTALL_ROOT}/install" ] && [ "$(ls -A ${INSTALL_ROOT}/install)" ]; then
+  SCRIPTS=$(find "${INSTALL_ROOT}/install" -type f)
+  for SCRIPT in $SCRIPTS; do
+      if [ -x $SCRIPT ]; then
+        printf " - running install script: ${SCRIPT}\n"
+          bash $SCRIPT
+      fi
+  done
+else
+  printf "${INFO}No install script found at path: $INSTALL_ROOT/install\n"
+fi
 
