@@ -16,19 +16,12 @@ cd <required directory>
 # Track the file (replace <FILES>) 
 system-configs track <FILES>
 ```
-- To untrack (unlink) run the following command(s)
-```bash
-# Enter the directory containing the file(s) to untrack
-cd <required directory>
 
-# Untrack the file (replace <FILE>). There is no unlink, there is restore and delete
-system-configs track --unlink <FILE>
-```
 
 ### Syncing Files 
-Once tracked, these files can be synced up to a dedicated remote repository within a specified user or Github organisation. These repositories will have the following naming structure: *\<user-or-organisation\>/system-configs-\<NAME\>*; where *NAME* is the provided *hostname* arguments above. 
+Once tracked, these files can be synced up to a dedicated remote repository within a specified user or Github organisation. These repositories will have the following naming structure: *\<user-or-organisation\>/system-configs-\<NAME\>*; where *NAME* is the hostname of the machine up until the first hyphen. A machine's hostname after the first hypen is considered to specify a sub-component within the system. 
 
-This allows for sub-components within a system (e.g., an Intel NUC running a RTOS for the main GPU computer) to also be tracked within the same repository. Using *athena-rtos* as an example, the repository structure will be *\<user-or-organisation\>/system-configs-athena/rtos*. Similarly, unlinked files can also be updated to their dedicated repositories via the same command. Overall, this means that any changes made to these files can be easily synced and maintained for the life of said system.
+This separation of the hostname after the first hyphen, allows for sub-components within a system to be tracked within the same repository. For example, if a system was comprised of a main GPU machine with the hostname *athena*, and an Intel NUC running a RTOS with the hostname *athena-rtos*. The tracked files for *athena* will be stored at *\<user-or-organisation\>/system-configs-athena/default* (default as it is the main component within the system). The tracked files for *athena-rtos* will be stored at *\<user-or-organisation\>/system-configs-athena/rtos* (rtos as it is the portion contained after the first hyphen).
 
 To sync up files, run the following:
 ```bash
@@ -42,11 +35,25 @@ system-configs config --owner <github_owner> --pat <github_pat>
 
 ### Installing a Configuration
 
-To install a system configuration, assuming the same hostname, use the install command.
+To install a system configuration stored on a remote repository, use the install command.
 
 ```bash
-system-configs install 
+# This will install the repository stored at https://github.com/<github_owner>/<NAME>, where NAME is the hostname of the machine up until the first hyphen. 
+system-configs install --owner <github_owner> 
 ```
+
+This command will copy the files in the sub-component machine's directory to the system. Remember, the sub-component is based on the machine's hostname. Additionally, as part of the installation process, the tool will attempt to run any scripts contained within an install directory within the sub-components folder. For example, building on the *athena* and *athena-rtos* from the earlier sync example:
+
+If the above command was run on a machine called *athena*. It would
+1. Clone the remote stored at *https://github.com/<github_owner>/athena*;
+2. Install the files stored in *https://github.com/<github_owner>/athena/default* to the required system locations; and
+3. Run any executable scripts stored in *https://github.com/<github_owner>/athena/default/install*.
+
+If the above command was run on a machine called *athena-rtos*. It would
+1. Clone the remote stored at *https://github.com/<github_owner>/athena*;
+2. Install the files stored in *https://github.com/<github_owner>/athena/rtos* to the required system locations; and
+3. Run any executable scripts stored in *https://github.com/<github_owner>/athena/rtos/install*.
+
 
 ## Using Templates
 
@@ -58,17 +65,15 @@ Use the sync command to create a template from the currently tracked system conf
 
 ```bash
 # Use the sync command and supply a template name to create a local and remote repo. 
-# The name will be prefixed with 'template-' to allow for easy identification of templates
+# The name will be prefixed with 'template-' to allow for easy identification of templates within the owner's github account
 system-configs sync --template <NAME>
 ```
 
 Use the above command to update a template as well. It will add any files that exist within the tracked system configuration files and notify the user of any differences between files in the template and system configuration file.
 
-When creating a template, it is important to understand what files might require additional setup for usability. For example:
+When creating a template, it is important to understand what files might require additional setup for usability. For example, any files containing instance specific information such as IP or MAC addresses.
 
-- Files specifying specific MAC addresses.
-
-It is important that if you are to create a template configuration set you keep it as general as possible to avoid additional configuration, or stipulate any updates (such as the above) in the template configuration repository README.
+It is important you keep template configurations as general as possible to avoid additional configuration, or stipulate any updates (such as changing IP or MAC addresses) in the template configuration repository README.
 
 ### Installing a Configuration Template
 
@@ -78,4 +83,4 @@ To install a configuration template use the install command with the template ar
 system-configs install --template <NAME>
 ```
 
-This will clone the template configuration files, and create a local and remote repository for tracking this specific system's configuration.
+This will clone the template configuration files, and create a local and remote repository for tracking this specific system's configuration. You can rerun this command on a system that is already tracking its own system configuration, and only files within the template that aren't already within the system configuration will be installed.
