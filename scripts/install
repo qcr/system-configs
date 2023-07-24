@@ -44,10 +44,11 @@ function print_usage(){
     printf "\nInstalls, or updates, a system configuration, from an existing remote system configuration or template configuration.
     
 Usage:
-    system_configs install [-h|--help] [-o|--owner] [-p|--pat] [-t|--template <name>]
+    system_configs install <email> [-h|--help] [-o|--owner] [-p|--pat] [-t|--template <name>]
 
 Arguments:
-    -h|--help
+    install       <email>   the user's GitHub email to identify commits.
+    -h|--help               prints this help menu
     -o|--owner    <owner>   the GitHub owner where the remote should exist. Set a default using the 'system-configs config' command.
     -p|--pat      <pat>     a GitHub personal access token (PAT) that can create repos for the given owner. Set a default using the 'system-configs config' command. Only required when installing from a template configuration.
     -t|--template <name>    the name of the template to install, do not included the prepended 'template-'.
@@ -124,8 +125,13 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     *)
-      echo "Invalid argument: \"$1\""
-      exit 1
+      if [ -z "$GH_EMAIL" ]; then
+        GH_EMAIL="$1"
+        shift
+      else
+        echo "Invalid argument: \"$1\""
+        exit 1
+      fi
   esac
 done
 
@@ -366,6 +372,8 @@ if [ ! -z $TEMPLATE ]; then
   # Add and commit local system configuration repo
   pushd $LOCAL_ROOT >/dev/null
   printf "\n${INFO}Adding and committing files...\n"
+  git config user.name qcbot
+  git config user.email $GH_EMAIL
   git add .
   git commit -m 'Commit made by QCR system-config tools'
 
