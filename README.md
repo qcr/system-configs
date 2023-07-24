@@ -84,3 +84,36 @@ system-configs install --template <NAME>
 ```
 
 This will clone the template configuration files, and create a local and remote repository for tracking this specific system's configuration. You can rerun this command on a system that is already tracking its own system configuration, and only files within the template that aren't already within the system configuration will be installed.
+
+
+## Order of Operations
+
+### Sync
+The order of operations when syncing for a machine:
+
+1. Create a remote machine repo, if required
+2. Initialise the local machine repo, if required
+3. Pull down the latest from the remote machine repo
+4. Add, commit, and push to the remote machine repo
+
+The order of operations when syncing for a template:
+
+1. Create a remote template repo, if required
+2. Initialise the local template repoe, if required
+3. Copy files from the local machine repo to the local template repo
+    - only files that don't already exist in the template will be copied
+    - for all files that already exist, it will report if any files differ
+5. Add, commit, and push to the remote template repo
+
+### Installation
+The order of operations when installing are:
+
+1. Check remote and local repository for this machine exist, create if required
+2. Get the remote and local into the same state
+3. Clone, or pull, the latest template repo (if installing from a template)
+4. Copy any files from the local template to the local machine repo
+    - will only copy files that don't exist in the local machine repo
+    - any files that already exist (based on filepath) will be checked for differences, and files that differ will be reported
+5. Commit local machine repository to the remote
+6. Install files from local repo to the machine
+7. Run any installation scripts for the machine
