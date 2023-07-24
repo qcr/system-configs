@@ -193,9 +193,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Make sure top level directories exist
+mkdir -p $STORE_PATH
+mkdir -p $BACK_UP_PATH
 # and have correct ownership
-_create_directory_and_set_ownership $STORE_PATH
-_create_directory_and_set_ownership $BACK_UP_PATH
+# _create_directory_and_set_ownership $STORE_PATH
+# _create_directory_and_set_ownership $BACK_UP_PATH
+
 
 # Get sub-component, which according to OUT001 (Naming Conventions), is everything after the first hyphen
 if [ "$SUB_COMP" == "" ]; then

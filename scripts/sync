@@ -142,9 +142,11 @@ done
 
 
 # Make sure top level directories exist
+mkdir -p $STORE_PATH
+mkdir -p $BACK_UP_PATH
 # and have correct ownership
-_create_directory_and_set_ownership $STORE_PATH
-_create_directory_and_set_ownership $BACK_UP_PATH
+# _create_directory_and_set_ownership $STORE_PATH
+# _create_directory_and_set_ownership $BACK_UP_PATH
 
 # Check required variables are set
 # Either from command line or user config

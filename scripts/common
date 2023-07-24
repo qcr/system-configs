@@ -58,39 +58,39 @@ BACK_UP_PATH=/var/qcr/back-up
 ### FUNCTIONS ###
 #################
 
-function _create_directory_and_set_ownership() {
-    # Creates a provided directory and sets
-    # the owner and group as avaiable
+# function _create_directory_and_set_ownership() {
+#     # Creates a provided directory and sets
+#     # the owner and group as avaiable
 
-    # Make local path directory
-    if [ ! -e $1 ]; then
-      sudo mkdir -p $1
-    fi
+#     # Make local path directory
+#     if [ ! -e $1 ]; then
+#       sudo mkdir -p $1
+#     fi
 
-    # Change owner and group if user is set to root
-    FUSER=$(stat -c '%U' $1)
-    if [ "$FUSER" == "root" ]; then
-        if [ $(compgen -u | grep qcr) ]; then
-            # User qcr exists
-            if [ $(compgen -g | grep qcr_users) ]; then
-                # Group qcr_users exist
-                sudo chown qcr:qcr_users $1
-            else
-                # Group qcr_users doesn't exist
-                sudo chown qcr:qcr $1
-            fi
-        else
-            # User qcr doesn't exist
-            if [ $(compgen -g | grep qcr_users) ]; then
-                # Group qcr_users exist
-                sudo chown $USER:qcr_users $1
-            else
-                # Group qcr_users doesn't exist
-                sudo chown $USER:$USER $1
-            fi
-        fi
-    fi
-}
+#     # Change owner and group if user is set to root
+#     FUSER=$(stat -c '%U' $1)
+#     if [ "$FUSER" == "root" ]; then
+#         if [ $(compgen -u | grep qcr) ]; then
+#             # User qcr exists
+#             if [ $(compgen -g | grep qcr_users) ]; then
+#                 # Group qcr_users exist
+#                 sudo chown qcr:qcr_users $1
+#             else
+#                 # Group qcr_users doesn't exist
+#                 sudo chown qcr:qcr $1
+#             fi
+#         else
+#             # User qcr doesn't exist
+#             if [ $(compgen -g | grep qcr_users) ]; then
+#                 # Group qcr_users exist
+#                 sudo chown $USER:qcr_users $1
+#             else
+#                 # Group qcr_users doesn't exist
+#                 sudo chown $USER:$USER $1
+#             fi
+#         fi
+#     fi
+# }
 
 function _get_base_name() {
   IFS='-' read -ra PARTS <<< $1

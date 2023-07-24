@@ -58,8 +58,15 @@ set -o pipefail
 # Source Common
 source ${SCRIPT_DIR}/scripts/common
 
+# Check SSH Agent is running
+if [ -z $SSH_AGENT_PID ]; then
+    print "${ERROR}The system-configs tool requires an SSH Agent to be running."
+    exit 1
+fi
+
 # Display heading
 display_heading "SYSTEMS CONFIG TOOL"
+
 
 # Split args into what is parsed here, and what goes to a subcommand
 SUB_INDEX=$(printf '%s\n' "$@" | grep -n '^[a-zA-Z]' | head -n 1 | cut -f1 -d: || echo "$(($#+1))")
@@ -114,5 +121,5 @@ if [ ${VERBOSE} == true ]; then
     fi
 fi
 
-# Run tool
-/bin/bash ${SCRIPT_DIR}/scripts/${CMD} ${ARGS_LIST[@]}
+# Run tool as sudo, passing in SSH Authorisation Socket
+sudo SSH_AUTH_SOCK="$SSH_AUTH_SOCK" /bin/bash ${SCRIPT_DIR}/scripts/${CMD} ${ARGS_LIST[@]}
