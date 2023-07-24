@@ -44,11 +44,12 @@ function print_usage(){
     printf "\nInstalls, or updates, a system configuration, from an existing remote system configuration or template configuration.
     
 Usage:
-    system_configs install <email> [-h|--help] [-o|--owner] [-p|--pat] [-t|--template <name>]
+    system_configs install <email> [-h|--help] [-f|--force] [-o|--owner] [-p|--pat] [-t|--template <name>]
 
 Arguments:
     install       <email>   the user's GitHub email to identify commits.
     -h|--help               prints this help menu
+    -f|--force              force overwrite existing symlinks with new ones.
     -o|--owner    <owner>   the GitHub owner where the remote should exist. Set a default using the 'system-configs config' command.
     -p|--pat      <pat>     a GitHub personal access token (PAT) that can create repos for the given owner. Set a default using the 'system-configs config' command. Only required when installing from a template configuration.
     -t|--template <name>    the name of the template to install, do not included the prepended 'template-'.
@@ -91,11 +92,15 @@ if [ -e ${DEFAULTS_FILE} ]; then
   source ${DEFAULTS_FILE}
 fi
 
+FORCE=false
 while [[ $# -gt 0 ]]; do
   case $1 in
     -h|--help) 
       print_usage
       exit 0;;
+    -f|--force) 
+      FORCE=true
+      ;;
     -H|--host|--hostname)
       HOSTNAME="$2"
       shift 2
@@ -411,7 +416,7 @@ for c in "${CONTENT[@]}"; do
     target="$target/"
   fi
 
-  if [[ -L "$target" ]] && [ "$(readlink -f $target)" == "$(realpath $c)" ]; then
+  if [[ -L "$target" ]] && [ "$(readlink -f $target)" == "$(realpath $c)" ] && [ $FORCE == false ]; then
       # Symlink already exists
       printf "\t\tSkipping as symlink already exists\n"
       continue
@@ -439,7 +444,7 @@ for c in "${CONTENT[@]}"; do
     mkdir -p $(dirname $target)
   fi
 
-  ln -s "$(realpath $c)" "$target"
+  ln -s -f "$(realpath $c)" "$target"
   printf "\t\tSymlinked to ${c}\n"
 done
 popd >/dev/null
