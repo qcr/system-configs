@@ -112,8 +112,8 @@ while [[ $# -gt 0 ]]; do
       HOSTNAME="$2"
       shift 2
       ;;
-    -s|--sub-component)
-      SUB_COMP="$2"
+    -v|--variant)
+      VARIANT="$2"
       shift 2
       ;;
     -t|--template)
