@@ -2,6 +2,9 @@
 #
 
 
+### IMPORTANT ###
+# This file must be run as sudo
+
 #################
 ### VARIABLES ###
 #################
@@ -54,6 +57,10 @@ set -euo pipefail
 
 # Source common
 source ${SCRIPT_DIR}/common
+
+# Root User Check
+# Will exit if isn't running as root user 
+_root_check
 
 # Make user config directory
 mkdir -p ${UC_DIR}

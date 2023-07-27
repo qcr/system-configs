@@ -58,14 +58,14 @@ set -o pipefail
 # Source Common
 source ${SCRIPT_DIR}/scripts/common
 
+# Display heading
+display_heading "SYSTEMS CONFIG TOOL"
+
 # Check SSH Agent is running
 if [ -z $SSH_AGENT_PID ]; then
     print "${ERROR}The system-configs tool requires an SSH Agent to be running."
     exit 1
 fi
-
-# Display heading
-display_heading "SYSTEMS CONFIG TOOL"
 
 
 # Split args into what is parsed here, and what goes to a subcommand

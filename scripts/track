@@ -7,6 +7,9 @@
 #
 # For more details, see https://docs.qcr.ai/reference/resources/config_tracking_tool/
 
+### IMPORTANT ###
+# This file must be run as sudo
+
 
 #################
 ### VARIABLES ###
@@ -154,6 +157,10 @@ set -euo pipefail
 
 # Source common
 source ${SCRIPT_DIR}/common
+
+# Root User Check
+# Will exit if isn't running as root user 
+_root_check
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do

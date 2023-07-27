@@ -9,6 +9,8 @@
 # For more details, see https://docs.qcr.ai/reference/resources/config_tracking_tool/
 
 
+### IMPORTANT ###
+# This file must be run as sudo
 
 #################
 ### VARIABLES ###
@@ -86,6 +88,10 @@ function _check_required_variables() {
 
 # Source common
 source ${SCRIPT_DIR}/common
+
+# Root User Check
+# Will exit if isn't running as root user 
+_root_check
 
 # Source user config
 if [ -e ${DEFAULTS_FILE} ]; then
