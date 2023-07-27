@@ -71,18 +71,18 @@ function _root_check() {
   if [ "$EUID" -ne 0 ]; then printf "${ERROR}Please re-run with sudo.\n"; exit 1; fi
 }
 
-function _get_base_name() {
+function _get_system_name() {
   IFS='-' read -ra PARTS <<< $1
   echo ${PARTS[0]}
 }
 
-function _get_sub_component() {
+function _get_component_name() {
   IFS='-' read -ra PARTS <<< $1
   SUB_COMP=$(IFS=- ; echo "${PARTS[*]:1}")
   if [ "$SUB_COMP" != "" ]; then
     echo $SUB_COMP
   else
-    echo "default"
+    echo "main"
   fi 
 }
 

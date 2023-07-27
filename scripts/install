@@ -161,14 +161,15 @@ if [ "${GH_OWNER}" == "" ]; then
 fi
 
 # Get the system name, which is everything prior to the first hyphen
-SYSTEM_NAME=$(_get_base_name $HOSTNAME)
+SYSTEM_NAME=$(_get_system_name $HOSTNAME)
 if [ ${SYSTEM_NAME} == "qcr" ]; then
   printf "${ERROR}The system name cannot be QCR. Please update the machine's hotname or use the hostname argument.\n"
   exit 1
 fi
 
-# Set the component name
-COMPONENT_NAME=$HOSTNAME
+# Get name of component, which is everything after the first hyphen
+# if nothing is after the first hyphen defaults to main
+COMPONENT_NAME=$(_get_component_name $HOSTNAME)
 
 # Set system configuration variables
 GH_REPO="system-configs-$SYSTEM_NAME"
@@ -202,8 +203,6 @@ if [ ! -z $TEMPLATE ]; then
   printf "\t- Local Repo Path: $TEMPLATE_ROOT\n"
   printf "\t- Remote Repository: https://github.com/$GH_TEMPLATE_PATH\n"
 fi
-printf "${INFO}Installing Sub-Component: $SUB_COMP\n"
-
 
 # Installing/updating from template or not
 if [ -z $TEMPLATE ]; then

@@ -203,24 +203,19 @@ done
 mkdir -p $STORE_PATH
 mkdir -p $BACK_UP_PATH
 
-
-# # Get sub-component, which is everything after the first hyphen
-# if [ "$SUB_COMP" == "" ]; then
-#   SUB_COMP=$(_get_sub_component $HOSTNAME)
-# fi
-
 # Get the system name, which is everything prior to the first hyphen
-SYSTEM_NAME=$(_get_base_name $HOSTNAME)
+SYSTEM_NAME=$(_get_system_name $HOSTNAME)
 if [ ${SYSTEM_NAME} == "qcr" ]; then
   printf "${ERROR}The system name cannot be QCR. Please update the machine's hotname or use the hostname argument.\n"
   exit 1
 fi
 
+# Get name of component, which is everything after the first hyphen
+# if nothing is after the first hyphen defaults to main
+COMPONENT_NAME=$(_get_component_name $HOSTNAME)
+
 # Set the repo name, which is based on the SYSTEM_NAME
 GH_REPO="system-configs-$SYSTEM_NAME"
-
-# Get the component name
-COMPONENT_NAME=$HOSTNAME
 
 # Create source path where files are to be stored and symlinked from
 SRC_PATH=$STORE_PATH/$GH_REPO/$COMPONENT_NAME/$VARIANT
