@@ -18,6 +18,7 @@ system-configs track <FILES>
 ```
 
 
+
 ### Syncing Files 
 Once tracked, these files can be synced up to a dedicated remote repository within a specified user or Github organisation. These repositories will have the following naming structure: *\<user-or-organisation\>/system-configs-\<NAME\>*; where *NAME* is the hostname of the machine up until the first hyphen. A machine's hostname after the first hypen is considered to specify a sub-component within the system. 
 
