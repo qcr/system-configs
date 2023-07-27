@@ -26,15 +26,24 @@ WARN="${YELLOW}[WARN]${RESET} "
 ERROR="${RED}[ERROR]${RESET} "
 
 # DEFAULT PARAMETERS
+ 
+# Store the hostname as a default parameter,
+# can be overwritten via command line arguments
+HOSTNAME=$(hostname)
 
-# The hostname of the system, must conform to: <system_name>-<variation> 
-# system_name: must be all lowercase a-z characters
-# variation: must be all lowercase a-z characters, or 0-9
-HOSTNAME="$(hostname)"   
+# The system name determined from the machine's hostname,
+# and is everything before the first hyphen within the hostname.
+SYSTEM_NAME=""
 
-# Sub component within the system (i.e., a secondary machine supporting the main system)
-# For example, a NUC running the RTOS for a Desktop GPU system
-SUB_COMP=""
+# The name of component within the system, which is simply
+# the machine's hostname. Needs to be set in each script,
+# rather than here as it is based on the hostname, which
+# may be passed in as an argument.
+COMPONENT_NAME=""
+
+# Variant, the name of the sub-component variation. For example, if a secondary
+# machine could be used to run two different robot arms. Default is default
+VARIANT="default"
 
 # Owner of the github repo where things will be synced
 # Set by user when first call sync or install command
@@ -50,7 +59,7 @@ STORE_PATH="/opt/qcr"
 
 # Location where original files are stored, for when
 # restore is called
-BACK_UP_PATH=/var/qcr/back-up
+BACK_UP_PATH="/var/qcr/back-up"
 
 
 

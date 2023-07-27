@@ -202,22 +202,28 @@ done
 # Make sure top level directories exist
 mkdir -p $STORE_PATH
 mkdir -p $BACK_UP_PATH
-# and have correct ownership
-# _create_directory_and_set_ownership $STORE_PATH
-# _create_directory_and_set_ownership $BACK_UP_PATH
 
 
-# Get sub-component, which according to OUT001 (Naming Conventions), is everything after the first hyphen
-if [ "$SUB_COMP" == "" ]; then
-  SUB_COMP=$(_get_sub_component $HOSTNAME)
+# # Get sub-component, which is everything after the first hyphen
+# if [ "$SUB_COMP" == "" ]; then
+#   SUB_COMP=$(_get_sub_component $HOSTNAME)
+# fi
+
+# Get the system name, which is everything prior to the first hyphen
+SYSTEM_NAME=$(_get_base_name $HOSTNAME)
+if [ ${SYSTEM_NAME} == "qcr" ]; then
+  printf "${ERROR}The system name cannot be QCR. Please update the machine's hotname or use the hostname argument.\n"
+  exit 1
 fi
 
-# Set repo name, based on the hostname, which according to OUT001 (Naming Conventions), is everything prior to the first hyphen
-HOSTNAME=$(_get_base_name $HOSTNAME)
-GH_REPO="system-configs-$HOSTNAME"
+# Set the repo name, which is based on the SYSTEM_NAME
+GH_REPO="system-configs-$SYSTEM_NAME"
+
+# Get the component name
+COMPONENT_NAME=$HOSTNAME
 
 # Create source path where files are to be stored and symlinked from
-SRC_PATH=$STORE_PATH/$GH_REPO/$SUB_COMP/
+SRC_PATH=$STORE_PATH/$GH_REPO/$COMPONENT_NAME/$VARIANT
 mkdir -p $SRC_PATH
 
 # Error checking, need at least one file
@@ -227,8 +233,9 @@ if [ ${#TARGET_FILES[@]} -eq 0 ]; then
 fi
 
 # Print info
-printf "\n${INFO}Hostname: ${HOSTNAME}\n"
-printf "${INFO}Sub-Component: $SUB_COMP\n"
+printf "\n${INFO}System Name: $SYSTEM_NAME\n"
+printf "${INFO}Component Name: $COMPONENT_NAME\n"
+printf "${INFO}Variant: $VARIANT\n"
 printf "${INFO}Source Path: $SRC_PATH\n"
 
 # Display heading

@@ -151,24 +151,29 @@ done
 # Make sure top level directories exist
 mkdir -p $STORE_PATH
 mkdir -p $BACK_UP_PATH
-# and have correct ownership
-# _create_directory_and_set_ownership $STORE_PATH
-# _create_directory_and_set_ownership $BACK_UP_PATH
 
 # Check required variables are set
 # Either from command line or user config
 _check_required_variables
 
-# Set repo name
-HOSTNAME=$(_get_base_name $HOSTNAME)
+# Get the system name, which is everything prior to the first hyphen
+SYSTEM_NAME=$(_get_base_name $HOSTNAME)
+if [ ${SYSTEM_NAME} == "qcr" ]; then
+  printf "${ERROR}The system name cannot be QCR. Please update the machine's hotname or use the hostname argument.\n"
+  exit 1
+fi
+
+
+# Set the repo name, based on the system name
+# and if this is a template or not
 if [ -z $TEMPLATE ]; then
-  GH_REPO="system-configs-$HOSTNAME"
+  GH_REPO="system-configs-$SYSTEM_NAME"
 else
   GH_REPO="template-$TEMPLATE"
 fi
 
 
-# Set github path and local repo root path (root)
+# Set github path and local repo root path 
 GH_PATH="$GH_OWNER/$GH_REPO"
 LOCAL_ROOT=$STORE_PATH/$GH_REPO
 
@@ -176,7 +181,7 @@ LOCAL_ROOT=$STORE_PATH/$GH_REPO
 mkdir -p $LOCAL_ROOT
 
 # Print information to user
-printf "\n${INFO}Hostname: $HOSTNAME\n"
+printf "\n${INFO}System Name: $SYSTEM_NAME\n"
 printf "${INFO}GitHub Email: $GH_EMAIL\n"
 printf "${INFO}GitHub Owner: $GH_OWNER\n"
 printf "${INFO}GitHub Repo: $GH_REPO\n"
@@ -212,10 +217,11 @@ fi
 
 # Pull down latest
 if [ "$PULL" == "1" ]; then
-    # TODO: Deal with local changes, merge conflicts, etc.
+
+    # ToDo check for merge conflicts
+
     printf "\n${INFO}Pulling from remote...\n"
     git pull
-    # TODO: pulling down new files doesn't install them
 fi
 
 
@@ -223,7 +229,7 @@ fi
 if [ ! -z $TEMPLATE ]; then
 
   # Get configuration files
-  CONFIG_ROOT=$STORE_PATH/"system-configs-$HOSTNAME"
+  CONFIG_ROOT=$STORE_PATH/"system-configs-$SYSTEM_NAME"
   FILES=$(find ${CONFIG_ROOT} -type f -not -path "*.git*" -not -name "README.md")
 
   # Add any missing files to template
@@ -258,6 +264,10 @@ fi
 
 # Navigate to local repo, set user email
 # GitHub uses user email to show committer not GitHub username
+if [ ! -d "${LOCAL_ROOT}" ]; then
+  printf "${ERROR}The directory '${YELLOW}${LOCAL_ROOT}${RESET}' does not exist.\n"
+  exit 1
+fi
 pushd $LOCAL_ROOT >/dev/null
 git config user.email $GH_EMAIL
 

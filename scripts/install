@@ -150,9 +150,6 @@ done
 # Make sure top level directories exist
 mkdir -p $STORE_PATH
 mkdir -p $BACK_UP_PATH
-# and have correct ownership
-# _create_directory_and_set_ownership $STORE_PATH
-# _create_directory_and_set_ownership $BACK_UP_PATH
 
 # Check owner variable is set
 if [ "${GH_OWNER}" == "" ]; then
@@ -163,14 +160,18 @@ if [ "${GH_OWNER}" == "" ]; then
   GH_OWNER=${UC_GH_OWNER}
 fi
 
-# Set sub-component and hostname variables
-if [ "$SUB_COMP" == "" ]; then
-  SUB_COMP=$(_get_sub_component $HOSTNAME)
+# Get the system name, which is everything prior to the first hyphen
+SYSTEM_NAME=$(_get_base_name $HOSTNAME)
+if [ ${SYSTEM_NAME} == "qcr" ]; then
+  printf "${ERROR}The system name cannot be QCR. Please update the machine's hotname or use the hostname argument.\n"
+  exit 1
 fi
-HOSTNAME=$(_get_base_name $HOSTNAME)
+
+# Set the component name
+COMPONENT_NAME=$HOSTNAME
 
 # Set system configuration variables
-GH_REPO="system-configs-$HOSTNAME"
+GH_REPO="system-configs-$SYSTEM_NAME"
 LOCAL_ROOT=$STORE_PATH/$GH_REPO
 GH_PATH=$GH_OWNER/$GH_REPO
 
@@ -186,7 +187,9 @@ fi
 _check_required_variables $GH_PATH
 
 # Print information
-printf "\n${INFO}Hostname: $HOSTNAME\n"
+printf "\n${INFO}System Name: $SYSTEM_NAME\n"
+printf "${INFO}Component Name: $COMPONENT_NAME\n"
+printf "${INFO}Variant: $VARIANT\n"
 printf "${INFO}GitHub Owner: $GH_OWNER\n"
 printf "${INFO}GitHub Branch: $GH_BRANCH\n"
 printf "${INFO}System Configuration Details:\n"
@@ -290,6 +293,10 @@ fi
 
 # Pull down any updates from remote system configuration
 mkdir -p $LOCAL_ROOT
+if [ ! -d ${LOCAL_ROOT} ]; then
+  printf "${ERROR}The directory '${YELLOW}${LOCAL_ROOT}${RESET}' does not exist\n."
+  exit 1
+fi
 pushd $LOCAL_ROOT >/dev/null
 printf "\n${INFO}Pulling from remote system configuration repo...\n"
 git pull
@@ -311,6 +318,10 @@ popd >/dev/null
 # Clone template
 if [ ! -z $TEMPLATE ]; then
   mkdir -p $TEMPLATE_ROOT
+  if [ ! -d ${TEMPLATE_ROOT} ]; then
+    printf "${ERROR}The directory '${YELLOW}${TEMPLATE_ROOT}${RESET}' does not exist\n."
+    exit 1
+  fi
   pushd $TEMPLATE_ROOT >/dev/null
 
   if [ "$(_check_local $TEMPLATE_ROOT)" == "0" ]; then
@@ -382,6 +393,10 @@ if [ ! -z $TEMPLATE ]; then
   fi
 
   # Add and commit local system configuration repo
+  if [ ! -d ${LOCAL_ROOT} ]; then
+    printf "${ERROR}The directory '${YELLOW}${LOCAL_ROOT}${RESET}' does not exist\n."
+    exit 1
+  fi
   pushd $LOCAL_ROOT >/dev/null
   printf "\n${INFO}Adding and committing files...\n"
   git config user.name qcbot
@@ -403,7 +418,11 @@ if [ ! -z $TEMPLATE ]; then
 fi
 
 # Install from local system configuration repo to actual system locations
-INSTALL_ROOT=$LOCAL_ROOT/$SUB_COMP
+INSTALL_ROOT=$LOCAL_ROOT/$COMPONENT_NAME/$VARIANT
+if [ ! -d ${INSTALL_ROOT} ]; then
+  printf "${ERROR}The directory '${YELLOW}${INSTALL_ROOT}${RESET}' does not exist\n."
+  exit 1
+fi
 pushd $INSTALL_ROOT >/dev/null
 
 # files to be installed
@@ -412,7 +431,7 @@ while IFS=  read -r -d $'\0'; do
   CONTENT+=("$REPLY")
 done < <(find . \( -type d \( -exec [ -f {}/.git ] \;  \) -prune \) -o \( -type f -not -path "./install/*" \) -print0)
 
-printf "\n${INFO}Installing Files..."
+printf "\n${INFO}Installing files from '${YELLOW}${INSTALL_ROOT}${RESET}'..."
 for c in "${CONTENT[@]}"; do
   # Get target file, without 
   target="/$(realpath --relative-to="$INSTALL_ROOT" "$c")"
