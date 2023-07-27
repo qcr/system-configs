@@ -17,12 +17,10 @@ cd <required directory>
 system-configs track <FILES>
 ```
 
-
-
 ### Syncing Files 
-Once tracked, these files can be synced up to a dedicated remote repository within a specified user or Github organisation. These repositories will have the following naming structure: *\<user-or-organisation\>/system-configs-\<NAME\>*; where *NAME* is the hostname of the machine up until the first hyphen. A machine's hostname after the first hypen is considered to specify a sub-component within the system. 
+Once tracked, these files can be synced up to a dedicated remote repository within a specified user or Github organisation. These repositories will have the following naming structure: *\<user-or-organisation\>/system-configs-\<system-name\>*; where *system-name* is the hostname of the machine up until the first hyphen. A machine's hostname after the first hypen, is considered to be the *component-name* and identifies a component within the system. If the machine's hostname doesn't have a hyphen, the component name defaults to *main*.
 
-This separation of the hostname after the first hyphen, allows for sub-components within a system to be tracked within the same repository. For example, if a system was comprised of a main GPU machine with the hostname *athena*, and an Intel NUC running a RTOS with the hostname *athena-rtos*. The tracked files for *athena* will be stored at *\<user-or-organisation\>/system-configs-athena/default* (default as it is the main component within the system). The tracked files for *athena-rtos* will be stored at *\<user-or-organisation\>/system-configs-athena/rtos* (rtos as it is the portion contained after the first hyphen).
+This separation of the hostname after the first hyphen, allows for components within a system to be tracked within the same repository. For example, if a system was comprised of a main GPU machine with the hostname *athena*, and an Intel NUC running an RTOS with the hostname *athena-rtos*. The tracked files for *athena* will be stored at *\<user-or-organisation\>/system-configs-athena/main/default* (as the hostname doesn't contain a hyphen). The tracked files for *athena-rtos* will be stored at *\<user-or-organisation\>/system-configs-athena/rtos/default* (rtos as it is the portion contained after the first hyphen).
 
 To sync up files, run the following:
 ```bash
@@ -43,17 +41,28 @@ To install a system configuration stored on a remote repository, use the install
 system-configs install --owner <github_owner> 
 ```
 
-This command will copy the files in the sub-component machine's directory to the system. Remember, the sub-component is based on the machine's hostname. Additionally, as part of the installation process, the tool will attempt to run any scripts contained within an install directory within the sub-components folder. For example, building on the *athena* and *athena-rtos* from the earlier sync example:
+This command will copy the files in the component machine's directory to the system. Remember, the component is based on the machine's hostname. Additionally, as part of the installation process, the tool will attempt to run any executable scripts contained within an install directory within the components folder. For example, building on the *athena* and *athena-rtos* from the earlier sync example:
 
 If the above command was run on a machine called *athena*. It would
 1. Clone the remote stored at *https://github.com/<github_owner>/athena*;
-2. Install the files stored in *https://github.com/<github_owner>/athena/default* to the required system locations; and
-3. Run any executable scripts stored in *https://github.com/<github_owner>/athena/default/install*.
+2. Install the files stored in *https://github.com/<github_owner>/athena/main/default* to the required system locations; and
+3. Run any executable scripts stored in *https://github.com/<github_owner>/athena/main/default/install*.
 
 If the above command was run on a machine called *athena-rtos*. It would
 1. Clone the remote stored at *https://github.com/<github_owner>/athena*;
-2. Install the files stored in *https://github.com/<github_owner>/athena/rtos* to the required system locations; and
-3. Run any executable scripts stored in *https://github.com/<github_owner>/athena/rtos/install*.
+2. Install the files stored in *https://github.com/<github_owner>/athena/rtos/default* to the required system locations; and
+3. Run any executable scripts stored in *https://github.com/<github_owner>/athena/rtos/default/install*.
+
+## Variants
+
+You may have noticed in the example above the inclusion of a *default* folder. For example, in:
+
+- *https://github.com/<github_owner>/athena/main/default*; and
+- *https://github.com/<github_owner>/athena/rtos/default*
+
+The tool also allows what is known as variants. A variant occurs when a system has competing requirements within a file. For example, a file may need to specify a different configuration depending if it is been used for Robot A or Robot B. This is where variants come in.
+
+**Note**: The variant feature is limited in its utility. Further development is required to do things such as easily swapping between variants.
 
 
 ## Using Templates
