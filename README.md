@@ -7,6 +7,24 @@ The *system-configs* tool is a series of scripts for managing and tracking of sy
 
 ## Basic Usage
 
+### Adding to an Existing System
+If you are adding an additional device to an existing system ("main" PC and "RTOS" system pre-existing, with a Raspberry Pi 4 to be added for example), there is an order of operations required to setup the RPi4 local repository to allow for syncing tracked files for the RPi4 given that there will be files already present on the remote repository. Tracking locally then syncing without first "installing" the existing configuration will result in a Git error: "Updates were rejected because the remote contains work that you do not have locally...". 
+
+See "Syncing Files" header for an explanation of the naming convention required to maintain the intended file structure on the remote repository. The order of operations should be as follows:
+
+Note: If the host device does not exist remotely, this will change nothing within its file-system other than the creation of a local repository at /opt/\<user>/system-configs-\<system name>. 
+```bash
+#Install existing config for the entire system.
+system-configs install --owner <github_owner>
+```
+
+The above will cause errors if the directory already exists, delete it if prior attempts have been made to track files locally. Correct execution should finish with two lines:
+```bash
+"Your branch is up to date with 'origin/main'
+"[Error] The directory '/opt/<user>/system-configs-<system name>/<host device>/default' does not exist.
+```
+This is expected as we are about to sync files to this location from the host device. You can now follow the following instructions for tracking local files and syncing to the remote repository. 
+
 ### How to Track/Untrack Files
 - Run the following command to track a file. Currently only individual files are supported (wildcards are not supported but are being looked into):
 ```bash
