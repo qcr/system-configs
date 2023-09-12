@@ -15,7 +15,7 @@ See "Syncing Files" header for an explanation of the naming convention required 
 Note: If the host device does not exist remotely, this will change nothing within its file-system other than the creation of a local repository at /opt/\<user>/system-configs-\<system name>. 
 ```bash
 #Install existing config for the entire system.
-system-configs install --owner <github_owner>
+qcr system-configs install --owner <github_owner>
 ```
 
 The above will cause errors if the directory already exists, delete it if prior attempts have been made to track files locally. Correct execution should finish with two lines:
@@ -32,7 +32,7 @@ This is expected as we are about to sync files to this location from the host de
 cd <required directory>
 
 # Track the file (replace <FILES>) 
-system-configs track <FILES>
+qcr system-configs track <FILES>
 ```
 
 ### Syncing Files 
@@ -43,11 +43,11 @@ This separation of the hostname after the first hyphen, allows for components wi
 To sync up files, run the following:
 ```bash
 # Run the sync command supplying your GitHub User Email, the GitHub User or Organisation that you wish to own the remote repository, and a GitHub Public Access Token (PAT) that has the ability to create repositories within the supplied GitHub Owner.
-system-configs sync <github_user_email> --owner <github_owner> --pat <github_pat>
+qcr system-configs sync <github_user_email> --owner <github_owner> --pat <github_pat>
 
 # You can also set user defaults so you don't need to supply the github owner and github_pat every time. Using the config command.
 # Run the command again if the defaults need to be updated.
-system-configs config --owner <github_owner> --pat <github_pat>
+qcr system-configs config --owner <github_owner> --pat <github_pat>
 ```
 
 ### Installing a Configuration
@@ -56,7 +56,7 @@ To install a system configuration stored on a remote repository, use the install
 
 ```bash
 # This will install the repository stored at https://github.com/<github_owner>/<NAME>, where NAME is the hostname of the machine up until the first hyphen. 
-system-configs install --owner <github_owner> 
+qcr system-configs install --owner <github_owner> 
 ```
 
 This command will copy the files in the component machine's directory to the system. Remember, the component is based on the machine's hostname. Additionally, as part of the installation process, the tool will attempt to run any executable scripts contained within an install directory within the components folder. For example, building on the *athena* and *athena-rtos* from the earlier sync example:
@@ -94,7 +94,7 @@ Use the sync command to create a template from the currently tracked system conf
 ```bash
 # Use the sync command and supply a template name to create a local and remote repo. 
 # The name will be prefixed with 'template-' to allow for easy identification of templates within the owner's github account
-system-configs sync --template <NAME>
+qcr system-configs sync --template <NAME>
 ```
 
 Use the above command to update a template as well. It will add any files that exist within the tracked system configuration files and notify the user of any differences between files in the template and system configuration file.
@@ -108,7 +108,7 @@ It is important you keep template configurations as general as possible to avoid
 To install a configuration template use the install command with the template argument.
 
 ```bash
-system-configs install --template <NAME>
+qcr system-configs install --template <NAME>
 ```
 
 This will clone the template configuration files, and create a local and remote repository for tracking this specific system's configuration. You can rerun this command on a system that is already tracking its own system configuration, and only files within the template that aren't already within the system configuration will be installed.
